@@ -1,0 +1,12 @@
+zap:
+  level: "info"
+  encoding: "json"
+  outputPaths: [ "stdout" ]
+  errorOutputPaths: [ "stderr" ]
+
+http:
+  run_mode: debug
+  http_port: 8000
+
+file_path:
+  files: "/app/files"
