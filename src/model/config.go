@@ -4,6 +4,7 @@ type Config struct {
 	Zap      ZapConfig         `yaml:"zap" mapstructure:"zap"`
 	Http     HttpConfig        `yaml:"http" mapstructure:"http"`
 	FilePath map[string]string `yaml:"file_path" mapstructure:"file_path"`
+	Replica  []ReplicaConfig   `yaml:"replica" mapstructure:"replica"`
 }
 
 type ZapConfig struct {
@@ -16,4 +17,10 @@ type ZapConfig struct {
 type HttpConfig struct {
 	RunMode  string `yaml:"run_mode" mapstructure:"run_mode"`
 	HttpPort int    `yaml:"http_port" mapstructure:"http_port"`
+}
+
+type ReplicaConfig struct {
+	Id   int    `yaml:"id" mapstructure:"id"`
+	Host string `yaml:"host" mapstructure:"host"`
+	Port int    `yaml:"port" mapstructure:"port"`
 }

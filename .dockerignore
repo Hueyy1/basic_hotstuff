@@ -293,7 +293,7 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
-# Pyre type checker
+# Pyre types checker
 .pyre/
 
 ### macOS template

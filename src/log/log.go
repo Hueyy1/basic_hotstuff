@@ -21,7 +21,7 @@ func InitLogger(conf *model.ZapConfig) (err error) {
 	cfg.EncoderConfig.EncodeTime = EpochMillisTimeEncoder
 
 	logger, err := cfg.Build(zap.Fields(
-		zap.String("server_name", "black_phone_storage"),
+		zap.String("server_name", "HotStuff"),
 	))
 	if err != nil {
 		panic(err)

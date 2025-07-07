@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package basichotstuffpb;
+
+import "gorums.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "hxy352/src/proto/basichotstuffpb";
+
+service BasicHotStuff {
+  rpc NewView(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc Prepare(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc PrepareVote(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc PreCommit(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc PreCommitVote(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc Commit(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc CommitVote(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc Decide(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc ReceiveRequestFromClient(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+}
+
+message Request {
+  string cmd = 1;
+  string clientAddress = 2;
+}
+
+enum BasicMessageType {
+  Unknown = 0;
+  NewView = 1;
+  Prepare = 2;
+  PrepareVote = 3;
+  PreCommit = 4;
+  PreCommitVote = 5;
+  Commit = 6;
+  CommitVote = 7;
+  Decide = 8;
+}
+//
+//message BasicMessage {
+//  BasicMessageType Type = 1; // m.type ∈ {new-view, prepare, pre-commit, commit, decide}
+//  uint64 ReplicaId = 2; // m.node contains a proposed node (the leaf node of a proposed branch)
+//  QuorumCert QC = 3; // There is an optional field m.justify. leader carry QC for different phases
+//  uint64 ViewNumber = 4; // m.viewNumber
+//}
+
+message Msg {
+  BasicMessageType Type = 1; // Type of the message
+  oneof Payload {
+    Block Block = 2; // Block for commit and pre-commit
+    PartialCert PartialCert = 3; // Partial certificate for prepare and prepare vote
+    Request Request = 4; // Request from client
+  }
+}
+
+message BlockHash {
+  bytes Hash = 1;
+}
+
+message Block {
+  bytes Parent = 1;
+  QuorumCert QC = 2;
+  uint64 View = 3;
+  bytes Command = 4;
+  uint32 Proposer = 5;
+  google.protobuf.Timestamp Timestamp =6;
+}
+
+message BLS12Signature {
+  bytes Sig = 1;
+}
+
+message Signature {
+  oneof Sig {
+    BLS12Signature BLS12Sig = 1;
+  }
+}
+
+message PartialCert {
+  QuorumSignature Sig = 1;
+  bytes Hash = 2;
+}
+
+message BLS12AggregateSignature {
+  bytes Sig = 1;
+  bytes participants = 2;
+}
+
+message QuorumSignature {
+  oneof Sig {
+    BLS12AggregateSignature BLS12Sig = 1;
+  }
+}
+
+message QuorumCert {
+  QuorumSignature Sig = 1;
+  uint64 View = 2;
+  bytes Hash = 3;
+}
+
+message SyncInfo {
+  QuorumCert QC = 1;
+}

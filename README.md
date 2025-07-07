@@ -1,6 +1,19 @@
 # HotStuff
 
+## Gorums Proto
+```shell
+# make sure install github.com/relab/gorums v0.7.1-0.20220818130557-8533cb369cd6
+# the lastest version has problem with protoc cmd
+protoc -I=$(go list -m -f {{.Dir}} github.com/relab/gorums):.\
+  --go_out=paths=source_relative:. \
+  --gorums_out=paths=source_relative:. \
+  proto/hotstuffpb/hotstuff.proto
 
+protoc -I=$(go list -m -f {{.Dir}} github.com/relab/gorums):.\
+  --go_out=paths=source_relative:. \
+  --gorums_out=paths=source_relative:. \
+  proto/basichotstuffpb/basichotstuff.proto
+```
 
 ## Getting started
 
