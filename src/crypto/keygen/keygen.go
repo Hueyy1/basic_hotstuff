@@ -2,6 +2,240 @@
 // and deserializing public keys, private keys and certificates.
 package keygen
 
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	ecdsacrypto "hxy352/src/crypto/ecdsa"
+	"hxy352/src/model"
+	"hxy352/src/types"
+	"os"
+)
+
+// WritePrivateKeyFile writes a private key to the specified file.
+func WritePrivateKeyFile(key types.PrivateKey, filePath string) (err error) {
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return
+	}
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+
+	b, err := PrivateKeyToPEM(key)
+	if err != nil {
+		return
+	}
+
+	_, err = f.Write(b)
+	return
+}
+
+// PrivateKeyToPEM encodes the private key in PEM format.
+func PrivateKeyToPEM(key types.PrivateKey) ([]byte, error) {
+	var (
+		marshaled []byte
+		keyType   string
+		err       error
+	)
+
+	marshaled, err = x509.MarshalECPrivateKey(key.(*ecdsa.PrivateKey))
+	if err != nil {
+		return nil, err
+	}
+	keyType = ecdsacrypto.PrivateKeyFileType
+
+	b := &pem.Block{
+		Type:  keyType,
+		Bytes: marshaled,
+	}
+	return pem.EncodeToMemory(b), nil
+}
+
+// WritePublicKeyFile writes a public key to the specified file.
+func WritePublicKeyFile(key types.PublicKey, filePath string) (err error) {
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return
+	}
+
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+
+	b, err := PublicKeyToPEM(key)
+	if err != nil {
+		return err
+	}
+
+	_, err = f.Write(b)
+	return err
+}
+
+// PublicKeyToPEM encodes the public key in PEM format.
+func PublicKeyToPEM(key types.PublicKey) ([]byte, error) {
+	var (
+		marshaled []byte
+		keyType   string
+		err       error
+	)
+
+	marshaled, err = x509.MarshalPKIXPublicKey(key.(*ecdsa.PublicKey))
+	if err != nil {
+		return nil, err
+	}
+	keyType = ecdsacrypto.PublicKeyFileType
+
+	b := &pem.Block{
+		Type:  keyType,
+		Bytes: marshaled,
+	}
+	return pem.EncodeToMemory(b), nil
+}
+
+// ReadPrivateKeyFile reads a private key from the specified file.
+func ReadPrivateKeyFile(keyFile string) (key types.PrivateKey, err error) {
+	b, err := os.ReadFile(keyFile)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePrivateKey(b)
+}
+
+// ParsePrivateKey parses a PEM encoded private key.
+func ParsePrivateKey(buf []byte) (key types.PrivateKey, err error) {
+	b, _ := pem.Decode(buf)
+
+	key, err = x509.ParseECPrivateKey(b.Bytes)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse key: %w", err)
+	}
+	return
+}
+
+// ReadPublicKeyFile reads a public key from the specified file.
+func ReadPublicKeyFile(keyFile string) (key types.PublicKey, err error) {
+	b, err := os.ReadFile(keyFile)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePublicKey(b)
+}
+
+// ParsePublicKey parses a PEM encoded public key
+func ParsePublicKey(buf []byte) (key types.PublicKey, err error) {
+	b, _ := pem.Decode(buf)
+	if b == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+
+	key, err = x509.ParsePKIXPublicKey(b.Bytes)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse key: %w", err)
+	}
+	return
+}
+
+func LoadPemFile(gConf *model.Config) (err error) {
+	for _, c := range gConf.Replica {
+
+		r := model.ReplicaConf{
+			Id:   types.ID(c.Id),
+			Conf: c,
+		}
+
+		privateKeyFile := gConf.FilePath["certs"] + "/" + c.PrivateFile
+		r.PriKey, err = ReadPrivateKeyFile(privateKeyFile)
+		if err != nil {
+			return err
+		}
+
+		publicKeyFile := gConf.FilePath["certs"] + "/" + c.PublicFile
+		r.PubKey, err = ReadPublicKeyFile(publicKeyFile)
+		if err != nil {
+			return err
+		}
+
+		r.PrivateKey, _ = PrivateKeyToPEM(r.PriKey)
+		r.PublicKey, _ = PublicKeyToPEM(r.PubKey)
+
+		gConf.ReplicaConf = append(gConf.ReplicaConf, r)
+	}
+
+	return nil
+}
+
+// KeyChain contains the keys and certificates needed by a replica, in PEM format.
+type KeyChain struct {
+	PrivateKey []byte
+	PublicKey  []byte
+	//Certificate    []byte
+	//CertificateKey []byte
+}
+
+// GenerateECDSAPrivateKey returns a new ECDSA private key.
+func GenerateECDSAPrivateKey() (pk *ecdsa.PrivateKey, err error) {
+	pk, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return pk, nil
+}
+
+// GenerateKeyChain generates keys and certificates for a replica.
+func GenerateKeyChain(gConf *model.Config) {
+	for _, rep := range gConf.Replica {
+		ecdsaKey, err := GenerateECDSAPrivateKey()
+		if err != nil {
+			panic(err)
+		}
+		//certKeyPEM, err := PrivateKeyToPEM(ecdsaKey)
+		//if err != nil {
+		//	return KeyChain{}, err
+		//}
+		//
+		//
+		//certPEM := CertToPEM(cert)
+
+		var privateKey types.PrivateKey
+		var publicKey types.PublicKey
+
+		privateKey = ecdsaKey
+		publicKey = privateKey.Public()
+
+		//privateKeyPEM, err := PrivateKeyToPEM(privateKey)
+		//if err != nil {
+		//	panic(err)
+		//}
+		//
+		//publicKeyPEM, err := PublicKeyToPEM(publicKey)
+		//if err != nil {
+		//	panic(err)
+		//}
+
+		privateKeyPath := gConf.FilePath["certs"] + "/" + rep.PrivateFile
+		publicKeyPath := gConf.FilePath["certs"] + "/" + rep.PublicFile
+		err = WritePrivateKeyFile(privateKey, privateKeyPath)
+		if err != nil {
+			panic(err)
+		}
+		err = WritePublicKeyFile(publicKey, publicKeyPath)
+		if err != nil {
+			panic(err)
+		}
+
+	}
+}
+
 //// GenerateECDSAPrivateKey returns a new ECDSA private key.
 //func GenerateECDSAPrivateKey() (pk *ecdsa.PrivateKey, err error) {
 //	pk, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

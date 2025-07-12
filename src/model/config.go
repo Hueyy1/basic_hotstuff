@@ -1,10 +1,14 @@
 package model
 
+import "hxy352/src/types"
+
 type Config struct {
-	Zap      ZapConfig         `yaml:"zap" mapstructure:"zap"`
-	Http     HttpConfig        `yaml:"http" mapstructure:"http"`
-	FilePath map[string]string `yaml:"file_path" mapstructure:"file_path"`
-	Replica  []ReplicaConfig   `yaml:"replica" mapstructure:"replica"`
+	Zap         ZapConfig         `yaml:"zap" mapstructure:"zap"`
+	Http        HttpConfig        `yaml:"http" mapstructure:"http"`
+	FilePath    map[string]string `yaml:"file_path" mapstructure:"file_path"`
+	Replica     []ReplicaConfig   `yaml:"replica" mapstructure:"replica"`
+	ReplicaConf []ReplicaConf
+	Id          types.ID
 }
 
 type ZapConfig struct {
@@ -23,6 +27,6 @@ type ReplicaConfig struct {
 	Id          int    `yaml:"id" mapstructure:"id"`
 	Host        string `yaml:"host" mapstructure:"host"`
 	Port        int    `yaml:"port" mapstructure:"port"`
-	PrivateFile int    `yaml:"privateFile" mapstructure:"privateFile"`
-	PublicFile  int    `yaml:"publicFile" mapstructure:"publicFile"`
+	PrivateFile string `yaml:"privateFile" mapstructure:"privateFile"`
+	PublicFile  string `yaml:"publicFile" mapstructure:"publicFile"`
 }

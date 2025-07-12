@@ -65,7 +65,7 @@ func TestNewRequest(t *testing.T) {
 	)
 	// Get all all available node ids, 3 nodes
 	addrs := []string{
-		"127.0.0.1:8000",
+		"127.0.0.1:8001",
 	}
 	// Create a configuration including all nodes
 	allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(addrs))
@@ -75,7 +75,7 @@ func TestNewRequest(t *testing.T) {
 	state := &basichotstuffpb.Msg{
 		Type: basichotstuffpb.BasicMessageType_Unknown,
 		Request: &basichotstuffpb.Request{
-			Cmd:           "12345",
+			Cmd:           "12345444444",
 			ClientAddress: "127.0.0.1:9000",
 		},
 	}

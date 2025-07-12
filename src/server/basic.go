@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"github.com/relab/gorums"
 	"hxy352/src/consensus"
 	"hxy352/src/crypto"
@@ -41,9 +40,10 @@ func NewBasicHotStuffImpl(conf *model.ReplicaConf, gConf *model.Config) *BasicHo
 //	gorumsSrv.Serve(lis)
 //}
 
-func (s *BasicHotStuffImpl) NewView(ctx gorums.ServerCtx, req *basichotstuffpb.Msg) {
-	fmt.Println("NewView")
-	log.Debugf("NewView request: %+v", req)
+func (s *BasicHotStuffImpl) NewView(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
+	log.Debugf("NewView request: %+v", msg)
+
+	s.Consensus.OnReceiveNewView(msg)
 
 	//v := types.View(0)
 	//
@@ -136,27 +136,34 @@ func (s *BasicHotStuffImpl) PrepareVote(ctx gorums.ServerCtx, msg *basichotstuff
 func (s *BasicHotStuffImpl) PreCommit(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("PreCommit raw request: %+v", msg)
 
-	s.Consensus.OnReceivePreCommitVote(msg)
+	s.Consensus.OnReceivePreCommit(msg)
 
 }
 
 func (s *BasicHotStuffImpl) PreCommitVote(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("PreCommitVote request: %+v", msg)
+
+	s.Consensus.OnReceivePreCommitVote(msg)
 }
 
 func (s *BasicHotStuffImpl) Commit(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("Commit request: %+v", msg)
+
+	s.Consensus.OnReceiveCommit(msg)
 
 }
 
 func (s *BasicHotStuffImpl) CommitVote(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("CommitVote request: %+v", msg)
 
+	s.Consensus.OnReceiveCommitVote(msg)
+
 }
 
 func (s *BasicHotStuffImpl) Decide(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("Decide request: %+v", msg)
 
+	s.Consensus.OnReceiveDecide(msg)
 }
 
 func (s *BasicHotStuffImpl) ReceiveRequestFromClient(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {

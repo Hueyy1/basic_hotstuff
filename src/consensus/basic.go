@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"hxy352/src/crypto"
-	"hxy352/src/crypto/bls12"
+	"hxy352/src/crypto/ecdsa"
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/proto/basichotstuffpb"
@@ -28,14 +28,19 @@ type BasicHotStuff struct {
 
 	BlockChain model.BlockChain
 
-	mut         sync.RWMutex // to protect the following
+	mut sync.RWMutex // to protect the following
+
 	CurrentView types.View
 	PrepareQC   types.QuorumCert
 	PreCommitQC types.QuorumCert //LockedQC
 	CommitQC    types.QuorumCert
 	HighQC      types.QuorumCert
 
-	verifiedVotes map[types.Hash][]types.PartialCert
+	verifiedPrepareVotes   map[types.Hash][]types.PartialCert
+	verifiedPreCommitVotes map[types.Hash][]types.PartialCert
+	verifiedCommitVotes    map[types.Hash][]types.PartialCert
+
+	highQCTmp []types.QuorumCert
 }
 
 func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStuff {
@@ -50,7 +55,7 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		crypto: crypto.CryptoImpl{
 			Conf:       conf,
 			Bc:         bc,
-			CryptoBase: bls12.New(conf),
+			CryptoBase: ecdsa.New(conf, gConf),
 		},
 
 		CurrentView: 1, // Initial view number
@@ -59,6 +64,10 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		//CommitQC:    types.NewQuorumCert(nil, 0, model.GetGenesis().Hash()),
 		//HighQC:      types.NewQuorumCert(nil, 0, model.GetGenesis().Hash()),
 		//HighQC: CreateQuorumCert(),
+
+		verifiedPrepareVotes:   make(map[types.Hash][]types.PartialCert),
+		verifiedPreCommitVotes: make(map[types.Hash][]types.PartialCert),
+		verifiedCommitVotes:    make(map[types.Hash][]types.PartialCert),
 	}
 	var err error
 	hs.HighQC, err = hs.crypto.CreateQuorumCert(model.GetGenesis(), []types.PartialCert{})
@@ -113,15 +122,8 @@ func (hs *BasicHotStuff) initAllReplicaClients() {
 }
 
 func (hs *BasicHotStuff) GetLeader() types.ID {
-	return types.ID(0) // Placeholder for the leader ID
+	return types.ID(hs.CurrentView % 4)
 }
-
-func (hs *BasicHotStuff) NewView() {
-
-}
-
-// OnReceiveNewView is called when a new view message is received.
-func (hs *BasicHotStuff) OnReceiveNewView() {}
 
 // CreateLeaf is called to create a new leaf block.
 func (hs *BasicHotStuff) CreateLeaf(parentHash types.Hash, cert types.QuorumCert, cmd types.Command) *model.Block {
@@ -135,7 +137,7 @@ func (hs *BasicHotStuff) CreateLeaf(parentHash types.Hash, cert types.QuorumCert
 }
 
 // SendPrepare is called to propose a new block.
-func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) *basichotstuffpb.Block {
+func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 
 	block := hs.CreateLeaf(hs.HighQC.BlockHash(), hs.HighQC, types.Command(cmd.GetCmd()))
 
@@ -146,18 +148,32 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) *basichotstuf
 	hs.initAllReplicaClients()
 
 	prepareMsg := &basichotstuffpb.Msg{
-		Type:  basichotstuffpb.BasicMessageType_Prepare,
-		View:  uint64(hs.CurrentView),
-		Block: pbBlock,
-		QC:    basichotstuffpb.QuorumCertToProto(hs.HighQC),
+		Type:        basichotstuffpb.BasicMessageType_Prepare,
+		View:        uint64(hs.CurrentView),
+		Block:       pbBlock,
+		PartialCert: nil,
+		QC:          basichotstuffpb.QuorumCertToProto(hs.HighQC),
 	}
 
 	for _, node := range hs.Nodes {
 		node.Prepare(context.Background(), prepareMsg)
 	}
 
-	log.Infof("send prepare msg: %+v", prepareMsg)
-	return pbBlock
+	log.Infof("SendPrepare: send prepare msg: %+v", prepareMsg)
+
+	// vote myself
+	go func() {
+		pc, err := hs.crypto.CreatePartialCert(block)
+
+		if err != nil {
+			log.Errorf("SendPrepare: failed to create partial certificate: %v", err)
+			return
+		}
+
+		hs.VoteMyself(&pc, basichotstuffpb.BasicMessageType_PrepareVote)
+	}()
+
+	return
 }
 
 // OnReceivePrepare is called when a prepare message is received.
@@ -165,15 +181,21 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePrepare: %.8s", msg.GetBlock().Hash)
 
 	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_Prepare) {
-		log.Errorf("[BASIC HOTSTUFF PREPARE] msg does not match: %s", msg.GetType().String())
+		log.Errorf("OnReceivePrepare: msg does not match: %s", msg.GetType().String())
 		return
 	}
 
 	pbBlock := msg.GetBlock()
 	block := basichotstuffpb.BlockFromProto(pbBlock)
 
-	if !hs.crypto.VerifyQuorumCert(block.QuorumCert()) {
-		log.Warnf("[BASIC HOTSTUFF PREPARE] invalid quorum certificate for block: %+v", block)
+	qcPb := msg.GetQC()
+	if qcPb == nil {
+		log.Errorf("OnReceivePrepare: partial certificate is nil")
+		return
+	}
+
+	if !hs.crypto.VerifyQuorumCert(basichotstuffpb.QuorumCertFromProto(qcPb)) {
+		log.Warnf("OnReceivePrepare: invalid quorum certificate for block: %+v", block)
 		return
 	}
 
@@ -213,6 +235,7 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 	hs.GetLeaderNode().PrepareVote(context.Background(), prepareVote)
 
 	log.Infof("[BASIC HOTSTUFF PREPARE] sent prepare vote for block: %s", block.Hash())
+
 }
 
 // OnReceivePrepareVote is called when a prepare vote is received.
@@ -226,7 +249,7 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 
 	pcPb := msg.GetPartialCert()
 	if pcPb == nil {
-		log.Errorf("prepare vote partial certificate is nil")
+		log.Errorf("OnReceivePrepareVote: partial certificate is nil")
 		return
 	}
 
@@ -249,19 +272,24 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 		return
 	}
 
+	log.Debugf("OnReceivePrepareVote: Vote PC verified: %.8s", pc.BlockHash())
+
 	hs.mut.Lock()
 	defer hs.mut.Unlock()
 
 	// store vote
-	// todo: clean old votes
-	// todo: or only store current view's votes?
-	votes := hs.verifiedVotes[pc.BlockHash()]
+	votes := hs.verifiedPrepareVotes[pc.BlockHash()]
 	votes = append(votes, pc)
-	hs.verifiedVotes[pc.BlockHash()] = votes
+	hs.verifiedPrepareVotes[pc.BlockHash()] = votes
 
 	if len(votes) < crypto.QuorumSize {
 		return
 	}
+
+	// todo: bug
+	// if we have 3 pc and we finished to create qc, but got 4th pc
+
+	log.Debugf("OnReceivePrepareVote: get vote size: %d", len(votes))
 
 	qc, err := hs.crypto.CreateQuorumCert(block, votes)
 	if err != nil {
@@ -273,14 +301,14 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 	hs.PrepareQC = qc
 
 	// clean votes after create QC
-	delete(hs.verifiedVotes, pc.BlockHash())
+	delete(hs.verifiedPrepareVotes, pc.BlockHash())
 
 	// send pre-commit
 
 	hs.initAllReplicaClients()
 
 	for _, node := range hs.Nodes {
-		node.Prepare(context.Background(), &basichotstuffpb.Msg{
+		node.PreCommit(context.Background(), &basichotstuffpb.Msg{
 			Type:        basichotstuffpb.BasicMessageType_PreCommit,
 			View:        uint64(hs.CurrentView),
 			Block:       msg.GetBlock(),
@@ -288,37 +316,436 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 			QC:          basichotstuffpb.QuorumCertToProto(qc),
 		})
 	}
+
+	// vote myself
+	go func() {
+		preCommitPC, err := hs.crypto.CreatePartialCert(block)
+
+		if err != nil {
+			log.Errorf("OnReceivePrepareVote:: failed to create partial certificate: %v", err)
+			return
+		}
+
+		hs.VoteMyself(&preCommitPC, basichotstuffpb.BasicMessageType_PreCommitVote)
+	}()
+
+}
+
+func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
+	log.Infof("OnReceivePreCommit: %.8s", msg.GetBlock().Hash)
+
+	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_PreCommit) {
+		log.Errorf("OnReceivePreCommit: msg does not match: %s", msg.GetType().String())
+		return
+	}
+
+	//pbBlock := msg.GetBlock()
+	//block := basichotstuffpb.BlockFromProto(pbBlock)
+
+	qcPb := msg.GetQC()
+	if qcPb == nil {
+		log.Errorf("OnReceivePreCommit: could not find QC")
+		return
+	}
+
+	qc := basichotstuffpb.QuorumCertFromProto(qcPb)
+
+	if !hs.crypto.VerifyQuorumCert(qc) {
+		log.Warnf("OnReceivePreCommit: invalid quorum certificate for block: %s", msg.GetType().String())
+		return
+	}
+
+	block, ok := hs.BlockChain.Get(qc.BlockHash())
+	if !ok {
+		log.Warnf("OnReceivePreCommit: Could not find block for vote: %.8s.", qc.BlockHash())
+		return
+	}
+
+	// Ensure the block is proposed by the expected leader
+	if hs.GetLeader() != block.Proposer() {
+		log.Warnf("OnReceivePreCommit: block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
+		return
+	}
+
+	pc, err := hs.crypto.CreatePartialCert(block)
+
+	if err != nil {
+		log.Errorf("OnReceivePreCommit: failed to create partial certificate: %.8s: %v", msg.GetBlock().Hash, err)
+		return
+	}
+
+	// Send preCommit vote
+	pCert := basichotstuffpb.PartialCertToProto(pc)
+
+	preCommitVote := &basichotstuffpb.Msg{
+		Type:        basichotstuffpb.BasicMessageType_PreCommitVote,
+		View:        uint64(hs.CurrentView),
+		Block:       msg.GetBlock(),
+		PartialCert: pCert,
+		QC:          nil,
+	}
+
+	//log.Debugf("leader node: %v", hs.GetLeaderNode())
+
+	hs.GetLeaderNode().PreCommitVote(context.Background(), preCommitVote)
+
+	log.Infof("OnReceivePreCommit sent prepare vote for block: %s", block.Hash())
+
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
+	hs.PrepareQC = block.QuorumCert()
 }
 
 // OnReceivePreCommitVote is called when a pre-commit vote is received.
 func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePreCommitVote: %.8s", msg.GetBlock().Hash)
+
+	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_PreCommitVote) {
+		log.Errorf("OnReceivePreCommitVote: preCommit vote msg does not match: %s", msg.GetType().String())
+		return
+	}
+
+	pcPb := msg.GetPartialCert()
+	if pcPb == nil {
+		log.Errorf("OnReceivePreCommitVote: partial certificate is nil")
+		return
+	}
+
+	pc := basichotstuffpb.PartialCertFromProto(pcPb)
+
+	block, ok := hs.BlockChain.Get(pc.BlockHash())
+	if !ok {
+		log.Warnf("OnReceivePreCommitVote: Could not find block for vote: %.8s.", pc.BlockHash())
+		return
+	}
+
+	if block.View() <= hs.HighQC.View() {
+		// too old
+		log.Warnf("OnReceivePreCommitVote: block too old: %.8s.", pc.BlockHash())
+		return
+	}
+
+	if !hs.crypto.VerifyPartialCert(pc) {
+		log.Info("OnReceivePreCommitVote: Vote could not be verified!")
+		return
+	}
+
+	log.Debugf("OnReceivePreCommitVote: Vote PC verified: %.8s", pc.BlockHash())
+
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
+
+	// store vote
+	votes := hs.verifiedPreCommitVotes[pc.BlockHash()]
+	votes = append(votes, pc)
+	hs.verifiedPreCommitVotes[pc.BlockHash()] = votes
+
+	if len(votes) < crypto.QuorumSize {
+		return
+	}
+
+	log.Debugf("OnReceivePreCommitVote: get vote size: %d", len(votes))
+
+	qc, err := hs.crypto.CreateQuorumCert(block, votes)
+	if err != nil {
+		log.Info("OnReceivePreCommitVote: could not create QC for block: ", err)
+		return
+	}
+
+	// store qc
+	hs.PreCommitQC = qc
+
+	// clean votes after create QC
+	delete(hs.verifiedPreCommitVotes, pc.BlockHash())
+
+	// send pre-commit
+
+	hs.initAllReplicaClients()
+
+	commitMsg := &basichotstuffpb.Msg{
+		Type:        basichotstuffpb.BasicMessageType_Commit,
+		View:        uint64(hs.CurrentView),
+		Block:       msg.GetBlock(),
+		PartialCert: nil,
+		QC:          basichotstuffpb.QuorumCertToProto(qc),
+	}
+
+	for _, node := range hs.Nodes {
+		node.Commit(context.Background(), commitMsg)
+	}
+
+	// vote myself
+	go func() {
+		commitPC, err := hs.crypto.CreatePartialCert(block)
+
+		if err != nil {
+			log.Errorf("OnReceivePreCommitVote: failed to create partial certificate: %v", err)
+			return
+		}
+
+		hs.VoteMyself(&commitPC, basichotstuffpb.BasicMessageType_CommitVote)
+	}()
+
 }
 
-// Commit is called to commit a block.
-func (hs *BasicHotStuff) Commit() {}
+// OnReceiveCommit is called to commit a block.
+func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
+	log.Infof("OnReceiveCommit: %.8s", msg.GetBlock().Hash)
 
-// OnReceiveCommitVote is called when a commit vote is received.
-func (hs *BasicHotStuff) OnReceiveCommitVote() {}
+	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_Commit) {
+		log.Errorf("OnReceiveCommit: msg does not match: %s", msg.GetType().String())
+		return
+	}
+
+	//pbBlock := msg.GetBlock()
+	//block := basichotstuffpb.BlockFromProto(pbBlock)
+
+	qcPb := msg.GetQC()
+	if qcPb == nil {
+		log.Errorf("OnReceiveCommit: could not find QC")
+		return
+	}
+
+	qc := basichotstuffpb.QuorumCertFromProto(qcPb)
+
+	if !hs.crypto.VerifyQuorumCert(qc) {
+		log.Warnf("OnReceiveCommit: invalid quorum certificate for block: %s", msg.GetType().String())
+		return
+	}
+
+	block, ok := hs.BlockChain.Get(qc.BlockHash())
+	if !ok {
+		log.Warnf("OnReceiveCommit: Could not find block for vote: %.8s.", qc.BlockHash())
+		return
+	}
+
+	// Ensure the block is proposed by the expected leader
+	if hs.GetLeader() != block.Proposer() {
+		log.Warnf("OnReceiveCommit: block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
+		return
+	}
+
+	pc, err := hs.crypto.CreatePartialCert(block)
+
+	if err != nil {
+		log.Errorf("OnReceiveCommit: failed to create partial certificate: %.8s: %v", msg.GetBlock().Hash, err)
+		return
+	}
+
+	// Send preCommit vote
+	pCert := basichotstuffpb.PartialCertToProto(pc)
+
+	commitVote := &basichotstuffpb.Msg{
+		Type:        basichotstuffpb.BasicMessageType_CommitVote,
+		View:        uint64(hs.CurrentView),
+		Block:       msg.GetBlock(),
+		PartialCert: pCert,
+		QC:          nil,
+	}
+
+	//log.Debugf("leader node: %v", hs.GetLeaderNode())
+
+	hs.GetLeaderNode().CommitVote(context.Background(), commitVote)
+
+	log.Infof("OnReceiveCommit sent commit vote for block: %s", block.Hash())
+
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
+	hs.PreCommitQC = block.QuorumCert()
+
+}
+
+// OnReceiveCommitVote is called when a pre-commit vote is received.
+func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
+	log.Infof("OnReceiveCommitVote: %.8s", msg.GetBlock().Hash)
+
+	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_CommitVote) {
+		log.Errorf("OnReceiveCommitVote: preCommit vote msg does not match: %s", msg.GetType().String())
+		return
+	}
+
+	pcPb := msg.GetPartialCert()
+	if pcPb == nil {
+		log.Errorf("OnReceiveCommitVote: partial certificate is nil")
+		return
+	}
+
+	pc := basichotstuffpb.PartialCertFromProto(pcPb)
+
+	block, ok := hs.BlockChain.Get(pc.BlockHash())
+	if !ok {
+		log.Warnf("OnReceiveCommitVote: Could not find block for vote: %.8s.", pc.BlockHash())
+		return
+	}
+
+	if block.View() <= hs.HighQC.View() {
+		// too old
+		log.Warnf("OnReceiveCommitVote: block too old: %.8s.", pc.BlockHash())
+		return
+	}
+
+	if !hs.crypto.VerifyPartialCert(pc) {
+		log.Info("OnReceiveCommitVote: Vote could not be verified!")
+		return
+	}
+
+	log.Debugf("OnReceiveCommitVote: Vote PC verified: %.8s", pc.BlockHash())
+
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
+
+	// store vote
+	votes := hs.verifiedCommitVotes[pc.BlockHash()]
+	votes = append(votes, pc)
+	hs.verifiedCommitVotes[pc.BlockHash()] = votes
+
+	if len(votes) < crypto.QuorumSize {
+		return
+	}
+
+	log.Debugf("OnReceiveCommitVote: get vote size: %d", len(votes))
+
+	qc, err := hs.crypto.CreateQuorumCert(block, votes)
+	if err != nil {
+		log.Info("OnReceiveCommitVote: could not create QC for block: ", err)
+		return
+	}
+
+	// store qc
+	hs.CommitQC = qc
+
+	// clean votes after create QC
+	delete(hs.verifiedCommitVotes, pc.BlockHash())
+
+	// send decide
+
+	hs.initAllReplicaClients()
+
+	decideMsg := &basichotstuffpb.Msg{
+		Type:        basichotstuffpb.BasicMessageType_Decide,
+		View:        uint64(hs.CurrentView),
+		Block:       msg.GetBlock(),
+		PartialCert: nil,
+		QC:          basichotstuffpb.QuorumCertToProto(qc),
+	}
+
+	for _, node := range hs.Nodes {
+		node.Decide(context.Background(), decideMsg)
+	}
+
+	// exec cmd
+	log.Infof("OnReceiveCommitVote: exec cmd: %s %s", msg.GetBlock().Hash, block.Command())
+
+	// view number + 1
+	hs.CurrentView += 1
+
+	// send new view
+	hs.SendNewView()
+}
 
 // Decide is called to decide on a block.
-func (hs *BasicHotStuff) Decide() {}
+func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
+	log.Infof("OnReceiveDecide: %.8s", msg.GetBlock().Hash)
 
-//func (hs *BasicHotStuff) CreateLeaf(cert types.SyncInfo, cmd types.Command) {
-//
-//
-//
-//
-//	// Create a new leaf block
-//	leaf := model.NewLeafBlock(hs.Conf.Id, hs.CurrentView, hs.PrepareQC, hs.PreCommitQC, hs.CommitQC)
-//	hs.BlockChain.AddBlock(leaf)
-//
-//	// Update the current view
-//	hs.CurrentView++
-//	hs.PrepareQC = types.NewQuorumCert(nil, 0, leaf.Hash())
-//	hs.PreCommitQC = types.NewQuorumCert(nil, 0, leaf.Hash())
-//	hs.CommitQC = types.NewQuorumCert(nil, 0, leaf.Hash())
-//}
+	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_Decide) {
+		log.Errorf("OnReceiveDecide: msg does not match: %s", msg.GetType().String())
+		return
+	}
+
+	qcPb := msg.GetQC()
+	if qcPb == nil {
+		log.Errorf("OnReceivePreCommit: could not find QC")
+		return
+	}
+
+	qc := basichotstuffpb.QuorumCertFromProto(qcPb)
+
+	if !hs.crypto.VerifyQuorumCert(qc) {
+		log.Warnf("OnReceiveDecide: invalid quorum certificate for block: %s", msg.GetType().String())
+		return
+	}
+
+	block, ok := hs.BlockChain.Get(qc.BlockHash())
+	if !ok {
+		log.Warnf("OnReceiveDecide: Could not find block for vote: %.8s.", qc.BlockHash())
+		return
+	}
+
+	// Ensure the block is proposed by the expected leader
+	if hs.GetLeader() != block.Proposer() {
+		log.Warnf("OnReceiveDecide: block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
+		return
+	}
+
+	// exec cmd
+	log.Infof("OnReceiveDecide: exec cmd: %s %s", msg.GetBlock().Hash, block.Command())
+
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
+
+	// view number + 1
+	hs.CurrentView += 1
+
+	// send new view to next leader
+	hs.SendNewView()
+
+}
+
+func (hs *BasicHotStuff) SendNewView() {
+	// send new view to next leader
+
+	l := hs.GetLeader()
+	if l == hs.Conf.Id {
+		return
+	}
+
+	log.Infof("OnSendNewView: sending new view to leader: %d", l)
+
+	hs.GetLeaderNode().NewView(context.Background(), &basichotstuffpb.Msg{
+		Type:        basichotstuffpb.BasicMessageType_NewView,
+		View:        uint64(hs.CurrentView),
+		Block:       nil,
+		PartialCert: nil,
+		QC:          basichotstuffpb.QuorumCertToProto(hs.PrepareQC),
+	})
+}
+
+// OnReceiveNewView is called when a new view message is received.
+func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
+	log.Infof("OnReceiveNewView: receive new view: %d", msg.GetView())
+
+	qcPb := msg.GetQC()
+	if qcPb == nil {
+		log.Errorf("OnReceiveNewView: could not find QC")
+		return
+	}
+
+	qc := basichotstuffpb.QuorumCertFromProto(qcPb)
+
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
+
+	hs.highQCTmp = append(hs.highQCTmp, qc)
+
+	if len(hs.highQCTmp) < crypto.QuorumSize {
+		return
+	}
+
+	maxQC := hs.PrepareQC
+
+	for _, tmp := range hs.highQCTmp {
+		if tmp.View() > maxQC.View() {
+			maxQC = tmp
+		}
+	}
+
+	hs.HighQC = maxQC
+
+	// clean hs.highQCTmp
+	hs.highQCTmp = hs.highQCTmp[:0]
+
+	log.Infof("OnReceiveNewView: new view finished")
+}
 
 func (hs *BasicHotStuff) MatchingMsg(msg *basichotstuffpb.Msg, msgType basichotstuffpb.BasicMessageType) bool {
 	return msg.GetType() == msgType && msg.GetView() == uint64(hs.CurrentView)
@@ -399,4 +826,30 @@ func normalizeAddr(addr string) (string, error) {
 	}
 
 	return net.JoinHostPort(ipAddr.IP.String(), port), nil
+}
+
+func (hs *BasicHotStuff) VoteMyself(pc *types.PartialCert, voteType basichotstuffpb.BasicMessageType) {
+	if hs.GetLeader() != hs.Conf.Id {
+		return
+	}
+
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
+
+	switch voteType {
+	case basichotstuffpb.BasicMessageType_PrepareVote:
+		votes := hs.verifiedPrepareVotes[pc.BlockHash()]
+		votes = append(votes, *pc)
+		hs.verifiedPrepareVotes[pc.BlockHash()] = votes
+	case basichotstuffpb.BasicMessageType_PreCommitVote:
+		votes := hs.verifiedPreCommitVotes[pc.BlockHash()]
+		votes = append(votes, *pc)
+		hs.verifiedPreCommitVotes[pc.BlockHash()] = votes
+	case basichotstuffpb.BasicMessageType_CommitVote:
+		votes := hs.verifiedCommitVotes[pc.BlockHash()]
+		votes = append(votes, *pc)
+		hs.verifiedCommitVotes[pc.BlockHash()] = votes
+	default:
+		log.Warnf("PrepareVoteMyself: unknown vote type: %v", voteType)
+	}
 }

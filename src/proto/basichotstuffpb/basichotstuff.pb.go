@@ -363,27 +363,29 @@ func (x *Block) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
-type BLS12Signature struct {
+type ECDSASignature struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sig           []byte                 `protobuf:"bytes,1,opt,name=Sig,proto3" json:"Sig,omitempty"`
+	Signer        uint32                 `protobuf:"varint,1,opt,name=Signer,proto3" json:"Signer,omitempty"`
+	R             []byte                 `protobuf:"bytes,2,opt,name=R,proto3" json:"R,omitempty"`
+	S             []byte                 `protobuf:"bytes,3,opt,name=S,proto3" json:"S,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BLS12Signature) Reset() {
-	*x = BLS12Signature{}
+func (x *ECDSASignature) Reset() {
+	*x = ECDSASignature{}
 	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BLS12Signature) String() string {
+func (x *ECDSASignature) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BLS12Signature) ProtoMessage() {}
+func (*ECDSASignature) ProtoMessage() {}
 
-func (x *BLS12Signature) ProtoReflect() protoreflect.Message {
+func (x *ECDSASignature) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -395,14 +397,28 @@ func (x *BLS12Signature) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BLS12Signature.ProtoReflect.Descriptor instead.
-func (*BLS12Signature) Descriptor() ([]byte, []int) {
+// Deprecated: Use ECDSASignature.ProtoReflect.Descriptor instead.
+func (*ECDSASignature) Descriptor() ([]byte, []int) {
 	return file_proto_basichotstuffpb_basichotstuff_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *BLS12Signature) GetSig() []byte {
+func (x *ECDSASignature) GetSigner() uint32 {
 	if x != nil {
-		return x.Sig
+		return x.Signer
+	}
+	return 0
+}
+
+func (x *ECDSASignature) GetR() []byte {
+	if x != nil {
+		return x.R
+	}
+	return nil
+}
+
+func (x *ECDSASignature) GetS() []byte {
+	if x != nil {
+		return x.S
 	}
 	return nil
 }
@@ -411,7 +427,7 @@ type Signature struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Sig:
 	//
-	//	*Signature_BLS12Sig
+	//	*Signature_ECDSASig
 	Sig           isSignature_Sig `protobuf_oneof:"Sig"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -454,10 +470,10 @@ func (x *Signature) GetSig() isSignature_Sig {
 	return nil
 }
 
-func (x *Signature) GetBLS12Sig() *BLS12Signature {
+func (x *Signature) GetECDSASig() *ECDSASignature {
 	if x != nil {
-		if x, ok := x.Sig.(*Signature_BLS12Sig); ok {
-			return x.BLS12Sig
+		if x, ok := x.Sig.(*Signature_ECDSASig); ok {
+			return x.ECDSASig
 		}
 	}
 	return nil
@@ -467,11 +483,11 @@ type isSignature_Sig interface {
 	isSignature_Sig()
 }
 
-type Signature_BLS12Sig struct {
-	BLS12Sig *BLS12Signature `protobuf:"bytes,1,opt,name=BLS12Sig,proto3,oneof"`
+type Signature_ECDSASig struct {
+	ECDSASig *ECDSASignature `protobuf:"bytes,1,opt,name=ECDSASig,proto3,oneof"`
 }
 
-func (*Signature_BLS12Sig) isSignature_Sig() {}
+func (*Signature_ECDSASig) isSignature_Sig() {}
 
 type PartialCert struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -525,28 +541,27 @@ func (x *PartialCert) GetHash() []byte {
 	return nil
 }
 
-type BLS12AggregateSignature struct {
+type ECDSAMultiSignature struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sig           []byte                 `protobuf:"bytes,1,opt,name=Sig,proto3" json:"Sig,omitempty"`
-	Participants  []byte                 `protobuf:"bytes,2,opt,name=participants,proto3" json:"participants,omitempty"`
+	Sigs          []*ECDSASignature      `protobuf:"bytes,1,rep,name=Sigs,proto3" json:"Sigs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BLS12AggregateSignature) Reset() {
-	*x = BLS12AggregateSignature{}
+func (x *ECDSAMultiSignature) Reset() {
+	*x = ECDSAMultiSignature{}
 	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BLS12AggregateSignature) String() string {
+func (x *ECDSAMultiSignature) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BLS12AggregateSignature) ProtoMessage() {}
+func (*ECDSAMultiSignature) ProtoMessage() {}
 
-func (x *BLS12AggregateSignature) ProtoReflect() protoreflect.Message {
+func (x *ECDSAMultiSignature) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -558,21 +573,14 @@ func (x *BLS12AggregateSignature) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BLS12AggregateSignature.ProtoReflect.Descriptor instead.
-func (*BLS12AggregateSignature) Descriptor() ([]byte, []int) {
+// Deprecated: Use ECDSAMultiSignature.ProtoReflect.Descriptor instead.
+func (*ECDSAMultiSignature) Descriptor() ([]byte, []int) {
 	return file_proto_basichotstuffpb_basichotstuff_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *BLS12AggregateSignature) GetSig() []byte {
+func (x *ECDSAMultiSignature) GetSigs() []*ECDSASignature {
 	if x != nil {
-		return x.Sig
-	}
-	return nil
-}
-
-func (x *BLS12AggregateSignature) GetParticipants() []byte {
-	if x != nil {
-		return x.Participants
+		return x.Sigs
 	}
 	return nil
 }
@@ -581,7 +589,7 @@ type QuorumSignature struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Sig:
 	//
-	//	*QuorumSignature_BLS12Sig
+	//	*QuorumSignature_ECDSASigs
 	Sig           isQuorumSignature_Sig `protobuf_oneof:"Sig"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -624,10 +632,10 @@ func (x *QuorumSignature) GetSig() isQuorumSignature_Sig {
 	return nil
 }
 
-func (x *QuorumSignature) GetBLS12Sig() *BLS12AggregateSignature {
+func (x *QuorumSignature) GetECDSASigs() *ECDSAMultiSignature {
 	if x != nil {
-		if x, ok := x.Sig.(*QuorumSignature_BLS12Sig); ok {
-			return x.BLS12Sig
+		if x, ok := x.Sig.(*QuorumSignature_ECDSASigs); ok {
+			return x.ECDSASigs
 		}
 	}
 	return nil
@@ -637,11 +645,11 @@ type isQuorumSignature_Sig interface {
 	isQuorumSignature_Sig()
 }
 
-type QuorumSignature_BLS12Sig struct {
-	BLS12Sig *BLS12AggregateSignature `protobuf:"bytes,1,opt,name=BLS12Sig,proto3,oneof"`
+type QuorumSignature_ECDSASigs struct {
+	ECDSASigs *ECDSAMultiSignature `protobuf:"bytes,1,opt,name=ECDSASigs,proto3,oneof"`
 }
 
-func (*QuorumSignature_BLS12Sig) isQuorumSignature_Sig() {}
+func (*QuorumSignature_ECDSASigs) isQuorumSignature_Sig() {}
 
 type QuorumCert struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -779,20 +787,21 @@ const file_proto_basichotstuffpb_basichotstuff_proto_rawDesc = "" +
 	"\aCommand\x18\x04 \x01(\fR\aCommand\x12+\n" +
 	"\x02QC\x18\x05 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC\x12\x1a\n" +
 	"\bProposer\x18\x06 \x01(\rR\bProposer\x128\n" +
-	"\tTimestamp\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tTimestamp\"\"\n" +
-	"\x0eBLS12Signature\x12\x10\n" +
-	"\x03Sig\x18\x01 \x01(\fR\x03Sig\"Q\n" +
+	"\tTimestamp\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tTimestamp\"D\n" +
+	"\x0eECDSASignature\x12\x16\n" +
+	"\x06Signer\x18\x01 \x01(\rR\x06Signer\x12\f\n" +
+	"\x01R\x18\x02 \x01(\fR\x01R\x12\f\n" +
+	"\x01S\x18\x03 \x01(\fR\x01S\"Q\n" +
 	"\tSignature\x12=\n" +
-	"\bBLS12Sig\x18\x01 \x01(\v2\x1f.basichotstuffpb.BLS12SignatureH\x00R\bBLS12SigB\x05\n" +
+	"\bECDSASig\x18\x01 \x01(\v2\x1f.basichotstuffpb.ECDSASignatureH\x00R\bECDSASigB\x05\n" +
 	"\x03Sig\"U\n" +
 	"\vPartialCert\x122\n" +
 	"\x03Sig\x18\x01 \x01(\v2 .basichotstuffpb.QuorumSignatureR\x03Sig\x12\x12\n" +
-	"\x04Hash\x18\x02 \x01(\fR\x04Hash\"O\n" +
-	"\x17BLS12AggregateSignature\x12\x10\n" +
-	"\x03Sig\x18\x01 \x01(\fR\x03Sig\x12\"\n" +
-	"\fparticipants\x18\x02 \x01(\fR\fparticipants\"`\n" +
-	"\x0fQuorumSignature\x12F\n" +
-	"\bBLS12Sig\x18\x01 \x01(\v2(.basichotstuffpb.BLS12AggregateSignatureH\x00R\bBLS12SigB\x05\n" +
+	"\x04Hash\x18\x02 \x01(\fR\x04Hash\"J\n" +
+	"\x13ECDSAMultiSignature\x123\n" +
+	"\x04Sigs\x18\x01 \x03(\v2\x1f.basichotstuffpb.ECDSASignatureR\x04Sigs\"^\n" +
+	"\x0fQuorumSignature\x12D\n" +
+	"\tECDSASigs\x18\x01 \x01(\v2$.basichotstuffpb.ECDSAMultiSignatureH\x00R\tECDSASigsB\x05\n" +
 	"\x03Sig\"\x9f\x01\n" +
 	"\n" +
 	"QuorumCert\x122\n" +
@@ -842,20 +851,20 @@ func file_proto_basichotstuffpb_basichotstuff_proto_rawDescGZIP() []byte {
 var file_proto_basichotstuffpb_basichotstuff_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_proto_basichotstuffpb_basichotstuff_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_proto_basichotstuffpb_basichotstuff_proto_goTypes = []any{
-	(BasicMessageType)(0),           // 0: basichotstuffpb.BasicMessageType
-	(*Request)(nil),                 // 1: basichotstuffpb.Request
-	(*Msg)(nil),                     // 2: basichotstuffpb.Msg
-	(*BlockHash)(nil),               // 3: basichotstuffpb.BlockHash
-	(*Block)(nil),                   // 4: basichotstuffpb.Block
-	(*BLS12Signature)(nil),          // 5: basichotstuffpb.BLS12Signature
-	(*Signature)(nil),               // 6: basichotstuffpb.Signature
-	(*PartialCert)(nil),             // 7: basichotstuffpb.PartialCert
-	(*BLS12AggregateSignature)(nil), // 8: basichotstuffpb.BLS12AggregateSignature
-	(*QuorumSignature)(nil),         // 9: basichotstuffpb.QuorumSignature
-	(*QuorumCert)(nil),              // 10: basichotstuffpb.QuorumCert
-	(*SyncInfo)(nil),                // 11: basichotstuffpb.SyncInfo
-	(*timestamppb.Timestamp)(nil),   // 12: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),           // 13: google.protobuf.Empty
+	(BasicMessageType)(0),         // 0: basichotstuffpb.BasicMessageType
+	(*Request)(nil),               // 1: basichotstuffpb.Request
+	(*Msg)(nil),                   // 2: basichotstuffpb.Msg
+	(*BlockHash)(nil),             // 3: basichotstuffpb.BlockHash
+	(*Block)(nil),                 // 4: basichotstuffpb.Block
+	(*ECDSASignature)(nil),        // 5: basichotstuffpb.ECDSASignature
+	(*Signature)(nil),             // 6: basichotstuffpb.Signature
+	(*PartialCert)(nil),           // 7: basichotstuffpb.PartialCert
+	(*ECDSAMultiSignature)(nil),   // 8: basichotstuffpb.ECDSAMultiSignature
+	(*QuorumSignature)(nil),       // 9: basichotstuffpb.QuorumSignature
+	(*QuorumCert)(nil),            // 10: basichotstuffpb.QuorumCert
+	(*SyncInfo)(nil),              // 11: basichotstuffpb.SyncInfo
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),         // 13: google.protobuf.Empty
 }
 var file_proto_basichotstuffpb_basichotstuff_proto_depIdxs = []int32{
 	0,  // 0: basichotstuffpb.Msg.Type:type_name -> basichotstuffpb.BasicMessageType
@@ -865,35 +874,36 @@ var file_proto_basichotstuffpb_basichotstuff_proto_depIdxs = []int32{
 	1,  // 4: basichotstuffpb.Msg.Request:type_name -> basichotstuffpb.Request
 	10, // 5: basichotstuffpb.Block.QC:type_name -> basichotstuffpb.QuorumCert
 	12, // 6: basichotstuffpb.Block.Timestamp:type_name -> google.protobuf.Timestamp
-	5,  // 7: basichotstuffpb.Signature.BLS12Sig:type_name -> basichotstuffpb.BLS12Signature
+	5,  // 7: basichotstuffpb.Signature.ECDSASig:type_name -> basichotstuffpb.ECDSASignature
 	9,  // 8: basichotstuffpb.PartialCert.Sig:type_name -> basichotstuffpb.QuorumSignature
-	8,  // 9: basichotstuffpb.QuorumSignature.BLS12Sig:type_name -> basichotstuffpb.BLS12AggregateSignature
-	9,  // 10: basichotstuffpb.QuorumCert.Sig:type_name -> basichotstuffpb.QuorumSignature
-	0,  // 11: basichotstuffpb.QuorumCert.Type:type_name -> basichotstuffpb.BasicMessageType
-	10, // 12: basichotstuffpb.SyncInfo.QC:type_name -> basichotstuffpb.QuorumCert
-	2,  // 13: basichotstuffpb.BasicHotStuff.NewView:input_type -> basichotstuffpb.Msg
-	2,  // 14: basichotstuffpb.BasicHotStuff.Prepare:input_type -> basichotstuffpb.Msg
-	2,  // 15: basichotstuffpb.BasicHotStuff.PrepareVote:input_type -> basichotstuffpb.Msg
-	2,  // 16: basichotstuffpb.BasicHotStuff.PreCommit:input_type -> basichotstuffpb.Msg
-	2,  // 17: basichotstuffpb.BasicHotStuff.PreCommitVote:input_type -> basichotstuffpb.Msg
-	2,  // 18: basichotstuffpb.BasicHotStuff.Commit:input_type -> basichotstuffpb.Msg
-	2,  // 19: basichotstuffpb.BasicHotStuff.CommitVote:input_type -> basichotstuffpb.Msg
-	2,  // 20: basichotstuffpb.BasicHotStuff.Decide:input_type -> basichotstuffpb.Msg
-	2,  // 21: basichotstuffpb.BasicHotStuff.ReceiveRequestFromClient:input_type -> basichotstuffpb.Msg
-	13, // 22: basichotstuffpb.BasicHotStuff.NewView:output_type -> google.protobuf.Empty
-	13, // 23: basichotstuffpb.BasicHotStuff.Prepare:output_type -> google.protobuf.Empty
-	13, // 24: basichotstuffpb.BasicHotStuff.PrepareVote:output_type -> google.protobuf.Empty
-	13, // 25: basichotstuffpb.BasicHotStuff.PreCommit:output_type -> google.protobuf.Empty
-	13, // 26: basichotstuffpb.BasicHotStuff.PreCommitVote:output_type -> google.protobuf.Empty
-	13, // 27: basichotstuffpb.BasicHotStuff.Commit:output_type -> google.protobuf.Empty
-	13, // 28: basichotstuffpb.BasicHotStuff.CommitVote:output_type -> google.protobuf.Empty
-	13, // 29: basichotstuffpb.BasicHotStuff.Decide:output_type -> google.protobuf.Empty
-	13, // 30: basichotstuffpb.BasicHotStuff.ReceiveRequestFromClient:output_type -> google.protobuf.Empty
-	22, // [22:31] is the sub-list for method output_type
-	13, // [13:22] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	5,  // 9: basichotstuffpb.ECDSAMultiSignature.Sigs:type_name -> basichotstuffpb.ECDSASignature
+	8,  // 10: basichotstuffpb.QuorumSignature.ECDSASigs:type_name -> basichotstuffpb.ECDSAMultiSignature
+	9,  // 11: basichotstuffpb.QuorumCert.Sig:type_name -> basichotstuffpb.QuorumSignature
+	0,  // 12: basichotstuffpb.QuorumCert.Type:type_name -> basichotstuffpb.BasicMessageType
+	10, // 13: basichotstuffpb.SyncInfo.QC:type_name -> basichotstuffpb.QuorumCert
+	2,  // 14: basichotstuffpb.BasicHotStuff.NewView:input_type -> basichotstuffpb.Msg
+	2,  // 15: basichotstuffpb.BasicHotStuff.Prepare:input_type -> basichotstuffpb.Msg
+	2,  // 16: basichotstuffpb.BasicHotStuff.PrepareVote:input_type -> basichotstuffpb.Msg
+	2,  // 17: basichotstuffpb.BasicHotStuff.PreCommit:input_type -> basichotstuffpb.Msg
+	2,  // 18: basichotstuffpb.BasicHotStuff.PreCommitVote:input_type -> basichotstuffpb.Msg
+	2,  // 19: basichotstuffpb.BasicHotStuff.Commit:input_type -> basichotstuffpb.Msg
+	2,  // 20: basichotstuffpb.BasicHotStuff.CommitVote:input_type -> basichotstuffpb.Msg
+	2,  // 21: basichotstuffpb.BasicHotStuff.Decide:input_type -> basichotstuffpb.Msg
+	2,  // 22: basichotstuffpb.BasicHotStuff.ReceiveRequestFromClient:input_type -> basichotstuffpb.Msg
+	13, // 23: basichotstuffpb.BasicHotStuff.NewView:output_type -> google.protobuf.Empty
+	13, // 24: basichotstuffpb.BasicHotStuff.Prepare:output_type -> google.protobuf.Empty
+	13, // 25: basichotstuffpb.BasicHotStuff.PrepareVote:output_type -> google.protobuf.Empty
+	13, // 26: basichotstuffpb.BasicHotStuff.PreCommit:output_type -> google.protobuf.Empty
+	13, // 27: basichotstuffpb.BasicHotStuff.PreCommitVote:output_type -> google.protobuf.Empty
+	13, // 28: basichotstuffpb.BasicHotStuff.Commit:output_type -> google.protobuf.Empty
+	13, // 29: basichotstuffpb.BasicHotStuff.CommitVote:output_type -> google.protobuf.Empty
+	13, // 30: basichotstuffpb.BasicHotStuff.Decide:output_type -> google.protobuf.Empty
+	13, // 31: basichotstuffpb.BasicHotStuff.ReceiveRequestFromClient:output_type -> google.protobuf.Empty
+	23, // [23:32] is the sub-list for method output_type
+	14, // [14:23] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_proto_basichotstuffpb_basichotstuff_proto_init() }
@@ -902,10 +912,10 @@ func file_proto_basichotstuffpb_basichotstuff_proto_init() {
 		return
 	}
 	file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[5].OneofWrappers = []any{
-		(*Signature_BLS12Sig)(nil),
+		(*Signature_ECDSASig)(nil),
 	}
 	file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[8].OneofWrappers = []any{
-		(*QuorumSignature_BLS12Sig)(nil),
+		(*QuorumSignature_ECDSASigs)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

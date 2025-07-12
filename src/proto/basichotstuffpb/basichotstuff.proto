@@ -103,13 +103,15 @@ message Block {
   google.protobuf.Timestamp Timestamp =7;
 }
 
-message BLS12Signature {
-  bytes Sig = 1;
+message ECDSASignature {
+  uint32 Signer = 1;
+  bytes R = 2;
+  bytes S = 3;
 }
 
 message Signature {
   oneof Sig {
-    BLS12Signature BLS12Sig = 1;
+    ECDSASignature ECDSASig = 1;
   }
 }
 
@@ -118,14 +120,11 @@ message PartialCert {
   bytes Hash = 2;
 }
 
-message BLS12AggregateSignature {
-  bytes Sig = 1;
-  bytes participants = 2;
-}
+message ECDSAMultiSignature { repeated ECDSASignature Sigs = 1; }
 
 message QuorumSignature {
   oneof Sig {
-    BLS12AggregateSignature BLS12Sig = 1;
+    ECDSAMultiSignature ECDSASigs = 1;
   }
 }
 

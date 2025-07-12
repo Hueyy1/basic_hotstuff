@@ -2,20 +2,25 @@ package basichotstuffpb
 
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"hxy352/src/crypto/bitfield"
-	"hxy352/src/crypto/bls12"
+	"hxy352/src/crypto"
+	"hxy352/src/crypto/ecdsa"
 	"hxy352/src/model"
 	"hxy352/src/types"
+	"math/big"
 )
 
 // QuorumSignatureFromProto converts a protocol buffers message to a threshold signature.
 func QuorumSignatureFromProto(sig *QuorumSignature) types.QuorumSignature {
-	if signature := sig.GetBLS12Sig(); signature != nil {
-		aggSig, err := bls12.RestoreAggregateSignature(signature.GetSig(), bitfield.BitfieldFromBytes(signature.GetParticipants()))
-		if err != nil {
-			return nil
+	if signature := sig.GetECDSASigs(); signature != nil {
+		sigs := make([]*ecdsa.Signature, len(signature.GetSigs()))
+		for i, sig := range signature.GetSigs() {
+			r := new(big.Int)
+			r.SetBytes(sig.GetR())
+			s := new(big.Int)
+			s.SetBytes(sig.GetS())
+			sigs[i] = ecdsa.RestoreSignature(r, s, types.ID(sig.GetSigner()))
 		}
-		return aggSig
+		return crypto.Restore(sigs)
 	}
 	return nil
 }
@@ -30,14 +35,23 @@ func QuorumCertFromProto(qc *QuorumCert) types.QuorumCert {
 // QuorumSignatureToProto converts a threshold signature to a protocol buffers message.
 func QuorumSignatureToProto(sig types.QuorumSignature) *QuorumSignature {
 	signature := &QuorumSignature{}
-	switch ms := sig.(type) {
 
-	case *bls12.AggregateSignature:
-		signature.Sig = &QuorumSignature_BLS12Sig{BLS12Sig: &BLS12AggregateSignature{
-			Sig:          ms.ToBytes(),
-			Participants: ms.Bitfield().Bytes(),
-		}}
+	if sig == nil {
+		return signature
 	}
+
+	sigs := make([]*ECDSASignature, 0, sig.Participants().Len())
+	for _, s := range sig.(crypto.Multi[*ecdsa.Signature]) {
+		sigs = append(sigs, &ECDSASignature{
+			Signer: uint32(s.Signer()),
+			R:      s.R().Bytes(),
+			S:      s.S().Bytes(),
+		})
+	}
+	signature.Sig = &QuorumSignature_ECDSASigs{ECDSASigs: &ECDSAMultiSignature{
+		Sigs: sigs,
+	}}
+
 	return signature
 }
 
