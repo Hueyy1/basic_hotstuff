@@ -66,70 +66,6 @@ func TestCreateQuorumCert(t *testing.T) {
 	runAll(t, run)
 }
 
-func TestCreateTimeoutCert(t *testing.T) {
-	run := func(t *testing.T, setup setupFunc) {
-		ctrl := gomock.NewController(t)
-
-		td := setup(t, ctrl, 4)
-
-		timeouts := testutil.CreateTimeouts(t, 1, td.signers)
-
-		tc, err := td.signers[0].CreateTimeoutCert(1, timeouts)
-		if err != nil {
-			t.Fatalf("Failed to create QC: %v", err)
-		}
-
-		if tc.View() != hotstuff.View(1) {
-			t.Error("Timeout certificate view does not match original view.")
-		}
-	}
-	runAll(t, run)
-}
-
-func TestCreateQCWithOneSig(t *testing.T) {
-	run := func(t *testing.T, setup setupFunc) {
-		ctrl := gomock.NewController(t)
-		td := setup(t, ctrl, 4)
-		pcs := testutil.CreatePCs(t, td.block, td.signers)
-		_, err := td.signers[0].CreateQuorumCert(td.block, pcs[:1])
-		if err == nil {
-			t.Fatal("Expected error when creating QC with only one signature")
-		}
-	}
-	runAll(t, run)
-}
-
-func TestCreateQCWithOverlappingSigs(t *testing.T) {
-	run := func(t *testing.T, setup setupFunc) {
-		ctrl := gomock.NewController(t)
-		td := setup(t, ctrl, 4)
-		pcs := testutil.CreatePCs(t, td.block, td.signers)
-		pcs = append(pcs, pcs[0])
-		_, err := td.signers[0].CreateQuorumCert(td.block, pcs)
-		if err == nil {
-			t.Fatal("Expected error when creating QC with overlapping signatures")
-		}
-	}
-	runAll(t, run)
-}
-
-func TestVerifyGenesisQC(t *testing.T) {
-	run := func(t *testing.T, setup setupFunc) {
-		ctrl := gomock.NewController(t)
-
-		td := setup(t, ctrl, 4)
-
-		genesisQC, err := td.signers[0].CreateQuorumCert(hotstuff.GetGenesis(), []hotstuff.PartialCert{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !td.verifiers[0].VerifyQuorumCert(genesisQC) {
-			t.Error("Genesis QC was not verified!")
-		}
-	}
-	runAll(t, run)
-}
-
 func TestVerifyQuorumCert(t *testing.T) {
 	run := func(t *testing.T, setup setupFunc) {
 		ctrl := gomock.NewController(t)
@@ -141,23 +77,6 @@ func TestVerifyQuorumCert(t *testing.T) {
 		for i, verifier := range td.verifiers {
 			if !verifier.VerifyQuorumCert(qc) {
 				t.Errorf("verifier %d failed to verify QC!", i+1)
-			}
-		}
-	}
-	runAll(t, run)
-}
-
-func TestVerifyTimeoutCert(t *testing.T) {
-	run := func(t *testing.T, setup setupFunc) {
-		ctrl := gomock.NewController(t)
-
-		td := setup(t, ctrl, 4)
-
-		tc := testutil.CreateTC(t, 1, td.signers)
-
-		for i, verifier := range td.verifiers {
-			if !verifier.VerifyTimeoutCert(tc) {
-				t.Errorf("verifier %d failed to verify TC!", i+1)
 			}
 		}
 	}

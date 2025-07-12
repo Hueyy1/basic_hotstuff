@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"github.com/relab/gorums"
 	"github.com/spf13/cobra"
@@ -19,19 +17,32 @@ import (
 var hsAnnotations = map[string]string{"app": "hotstuff", "isGraceful": "true"}
 
 func newBasicHotStuffServiceCmd() *cobra.Command {
-	//var useTls bool
+	var id int
 	cmd := &cobra.Command{
 		Use:         "bhs",
 		Long:        "basic hotstuff",
 		RunE:        startBasicHotStuffService,
 		Annotations: hsAnnotations,
 	}
-	//cmd.Flags().BoolVarP(&useTls, "use-tls", "u", true, "use tls")
+	cmd.Flags().IntVarP(&id, "id", "i", 0, "id of the replica, start from 0")
+	return cmd
+}
+
+func newBasicHotStuffCertsCmd() *cobra.Command {
+	//var id int
+	cmd := &cobra.Command{
+		Use:  "bhs-certs",
+		Long: "basic hotstuff certs",
+		RunE: startBasicHotStuffCerts,
+		//Annotations: hsAnnotations,
+	}
+	//cmd.Flags().IntVarP(&id, "id", "i", 0, "id of the replica, start from 0")
 	return cmd
 }
 
 func init() {
 	rootCmd.AddCommand(newBasicHotStuffServiceCmd())
+	rootCmd.AddCommand(newBasicHotStuffCertsCmd())
 }
 
 func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
@@ -102,21 +113,21 @@ func createReplica(replicaConf *model.ReplicaConf) error {
 	if err != nil {
 		return err
 	}
-	var certificate tls.Certificate
-	var rootCAs *x509.CertPool
+	//var certificate tls.Certificate
+	//var rootCAs *x509.CertPool
 	log.Debugf("Using TLS: %v", replicaConf.UseTLS)
-	fmt.Println(string(replicaConf.CertificateKey))
-	if replicaConf.UseTLS {
-		certificate, err = tls.X509KeyPair(replicaConf.Certificate, replicaConf.CertificateKey)
-		if err != nil {
-			return err
-		}
-		rootCAs = x509.NewCertPool()
-		rootCAs.AppendCertsFromPEM(replicaConf.CertificateAuthority)
-	}
-	replicaConf.RootCAs = rootCAs
+	//fmt.Println(string(replicaConf.CertificateKey))
+	//if replicaConf.UseTLS {
+	//	certificate, err = tls.X509KeyPair(replicaConf.Certificate, replicaConf.CertificateKey)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	rootCAs = x509.NewCertPool()
+	//	rootCAs.AppendCertsFromPEM(replicaConf.CertificateAuthority)
+	//}
+	//replicaConf.RootCAs = rootCAs
 	replicaConf.PrivKey = privKey
-	replicaConf.TlsCertificate = certificate
+	//replicaConf.TlsCertificate = certificate
 
 	return nil
 
@@ -215,4 +226,37 @@ func getPort(lis net.Listener) (uint32, error) {
 		return 0, err
 	}
 	return uint32(port), nil
+}
+
+func startBasicHotStuffCerts(cmd *cobra.Command, _ []string) (err error) {
+	gCfg := LoadConfig()
+	log.Infof("config is %+v", gCfg)
+
+	//replicaConf := &model.ReplicaConf{
+	//	Id:     types.ID(id),
+	//	Conf:   gCfg.Replica[id],
+	//	UseTLS: false,
+	//}
+
+	caKey, ca, err := bls12.GenerateCA()
+	if err != nil {
+		return err
+	}
+
+	_ = bls12.WriteCertFile(ca, gCfg.FilePath["ca"])
+
+	_ = bls12.CertToPEM(ca)
+	validFor := []string{"localhost", "127.0.0.1"}
+
+	_crypto := "bls12" // default crypto
+
+	for _, replica := range gCfg.Replica {
+		// todo: bug
+		_, err := bls12.GenerateKeyChain(types.ID(replica.Id), validFor, _crypto, ca, caKey)
+		if err != nil {
+			return fmt.Errorf("failed to generate keychain: %w", err)
+		}
+	}
+
+	return nil
 }

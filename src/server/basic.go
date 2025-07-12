@@ -41,7 +41,7 @@ func NewBasicHotStuffImpl(conf *model.ReplicaConf, gConf *model.Config) *BasicHo
 //	gorumsSrv.Serve(lis)
 //}
 
-func (s *BasicHotStuffImpl) NewView(ctx gorums.ServerCtx, req *basichotstuffpb.SyncInfo) {
+func (s *BasicHotStuffImpl) NewView(ctx gorums.ServerCtx, req *basichotstuffpb.Msg) {
 	fmt.Println("NewView")
 	log.Debugf("NewView request: %+v", req)
 
@@ -120,17 +120,23 @@ func (s *BasicHotStuffImpl) NewView(ctx gorums.ServerCtx, req *basichotstuffpb.S
 ////}
 
 func (s *BasicHotStuffImpl) Prepare(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
-	log.Debugf("Prepare request: %+v", msg)
+	log.Debugf("Prepare raw request: %+v", msg)
+
+	s.Consensus.OnReceivePrepare(msg)
 
 }
 
 func (s *BasicHotStuffImpl) PrepareVote(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
-	log.Debugf("PrepareVote request: %+v", msg)
+	log.Debugf("PrepareVote raw request: %+v", msg)
+
+	s.Consensus.OnReceivePrepareVote(msg)
 
 }
 
 func (s *BasicHotStuffImpl) PreCommit(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
-	log.Debugf("PreCommit request: %+v", msg)
+	log.Debugf("PreCommit raw request: %+v", msg)
+
+	s.Consensus.OnReceivePreCommitVote(msg)
 
 }
 
@@ -154,10 +160,32 @@ func (s *BasicHotStuffImpl) Decide(ctx gorums.ServerCtx, msg *basichotstuffpb.Ms
 }
 
 func (s *BasicHotStuffImpl) ReceiveRequestFromClient(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
-	log.Debugf("ReceiveRequestFromClient request: %+v", msg)
 
-	pbBlock := s.Consensus.SendPrepare(msg.GetRequest())
+	req := msg.GetRequest()
+
+	log.Debugf("Got request msg, content:%s", req.String())
+
+	if req == nil {
+		log.Warnf("ReceiveRequestFromClient request is nil")
+		return
+	}
+
+	// check if leader, otherwise send to leader
+	if s.Consensus.GetLeader() != s.Consensus.Conf.Id {
+		log.Warnf("current replica is not leader, current leader is %d, resend to leader", s.Consensus.GetLeader())
+		// send to leader
+		s.Consensus.Unicast(msg)
+		return
+	}
+
+	// todo: check if view changing, if so, return
+	//if bhs.CurExec.Node != nil || bhs.View.ViewChanging {
+	//	return
+	//}
+
+	//pbBlock := s.Consensus.SendPrepare(req)
+	s.Consensus.SendPrepare(req)
 
 	// vote self
-	s.Consensus.OnReceivePrepareVote(pbBlock)
+	//s.Consensus.OnReceivePrepareVote(pbBlock)
 }

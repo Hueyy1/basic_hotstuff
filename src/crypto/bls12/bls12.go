@@ -147,25 +147,37 @@ type bls12Base struct {
 	priKey  *PrivateKey
 	replica model.Replica
 
-	opts *model.Options
+	//opts *model.Options
 
 	mut sync.RWMutex
 	// popCache caches the proof-of-possession results of popVerify for each public key.
 	popCache map[string]bool
+
+	conf  *model.ReplicaConf
+	gConf *model.Config
 }
 
 // New returns a new instance of the BLS12 CryptoBase implementation.
-func New() crypto.CryptoBase {
+func New(conf *model.ReplicaConf) crypto.CryptoBase {
+	var pk PrivateKey
+	pk.FromBytes(conf.PrivateKey)
+
 	return &bls12Base{
 		popCache: make(map[string]bool),
+		conf:     conf,
+		//priKey: &PrivateKey{},
+		priKey: &pk,
 	}
 }
 
 func (bls *bls12Base) privateKey() *PrivateKey {
-	return bls.opts.PrivateKey().(*PrivateKey)
+	//log.Infof("opt: %+v", bls.opts)
+	//return bls.opts.PrivateKey().(*PrivateKey)
+	return bls.priKey
 }
 
 func (bls *bls12Base) publicKey(id types.ID) (pubKey *PublicKey, ok bool) {
+
 	//if replica, ok := bls.configuration.Replica(id); ok {
 	//	if replica.ID() != bls.opts.ID() && !bls.checkPop(replica) {
 	//		bls.logger.Warnf("Invalid POP for replica %d", id)
@@ -318,7 +330,8 @@ func (bls *bls12Base) Sign(message []byte) (signature types.QuorumSignature, err
 		return nil, fmt.Errorf("bls12: coreSign failed: %w", err)
 	}
 	bf := bitfield.Bitfield{}
-	bf.Add(bls.opts.ID())
+	//bf.Add(bls.opts.ID())
+	bf.Add(bls.conf.Id)
 	return &AggregateSignature{sig: *p, participants: bf}, nil
 }
 
@@ -731,6 +744,11 @@ func GenerateKeyChain(id types.ID, validFor []string, crypto string, ca *x509.Ce
 	if err != nil {
 		return KeyChain{}, err
 	}
+
+	WritePrivateKeyFile(privateKey, "/Users/huey/Documents/cs/project/code/hxy352/certs/"+fmt.Sprintf("%d", id)+".key")
+	WritePublicKeyFile(publicKey, "/Users/huey/Documents/cs/project/code/hxy352/certs/"+fmt.Sprintf("%d", id)+".pub")
+	WriteCertFile(cert, "/Users/huey/Documents/cs/project/code/hxy352/certs/"+fmt.Sprintf("%d", id)+".cert")
+	//WriteCertFile(ecdsaKey, "/Users/huey/Documents/cs/project/code/hxy352/certs/" + fmt.Sprintf("%d", id) + ".cert")
 
 	return KeyChain{
 		PrivateKey:     privateKeyPEM,

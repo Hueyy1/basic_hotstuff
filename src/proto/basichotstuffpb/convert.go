@@ -54,8 +54,10 @@ func QuorumCertToProto(qc types.QuorumCert) *QuorumCert {
 // BlockToProto converts a consensus.Block to a hotstuffpb.Block.
 func BlockToProto(block *model.Block) *Block {
 	parentHash := block.Parent()
+	h := block.Hash()
 	return &Block{
 		Parent:    parentHash[:],
+		Hash:      h[:],
 		Command:   []byte(block.Command()),
 		QC:        QuorumCertToProto(block.QuorumCert()),
 		View:      uint64(block.View()),
@@ -78,4 +80,20 @@ func BlockFromProto(block *Block) *model.Block {
 	)
 	b.SetTimestamp(block.Timestamp.AsTime())
 	return b
+}
+
+// PartialCertToProto converts a consensus.PartialCert to a hotstuffpb.PartialCert.
+func PartialCertToProto(cert types.PartialCert) *PartialCert {
+	hash := cert.BlockHash()
+	return &PartialCert{
+		Sig:  QuorumSignatureToProto(cert.Signature()),
+		Hash: hash[:],
+	}
+}
+
+// PartialCertFromProto converts a hotstuffpb.PartialCert to an ecdsa.PartialCert.
+func PartialCertFromProto(cert *PartialCert) types.PartialCert {
+	var h types.Hash
+	copy(h[:], cert.GetHash())
+	return types.NewPartialCert(QuorumSignatureFromProto(cert.GetSig()), h)
 }

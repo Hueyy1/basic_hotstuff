@@ -18,7 +18,7 @@ const (
 	// Verify that this generated code is sufficiently up-to-date.
 	_ = gorums.EnforceVersion(9 - gorums.MinVersion)
 	// Verify that the gorums runtime is sufficiently up-to-date.
-	_ = gorums.EnforceVersion(gorums.MaxVersion - 9)
+	//_ = gorums.EnforceVersion(gorums.MaxVersion - 9)
 )
 
 // A Configuration represents a static set of nodes on which quorum remote

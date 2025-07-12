@@ -57,7 +57,7 @@ import (
 //	}
 //}
 
-func Test1(t *testing.T) {
+func TestNewRequest(t *testing.T) {
 	mgr := basichotstuffpb.NewManager(
 		gorums.WithGrpcDialOptions(
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -72,14 +72,16 @@ func Test1(t *testing.T) {
 	if err != nil {
 		log.Fatalln("error creating read config:", err)
 	} // Test state
-	state := &basichotstuffpb.BasicMessage{
-		Type:       basichotstuffpb.BasicMessageType_NewView,
-		ReplicaId:  0,
-		ViewNumber: 1,
+	state := &basichotstuffpb.Msg{
+		Type: basichotstuffpb.BasicMessageType_Unknown,
+		Request: &basichotstuffpb.Request{
+			Cmd:           "12345",
+			ClientAddress: "127.0.0.1:9000",
+		},
 	}
 
 	// Invoke Write RPC on all nodes in config
 	for _, node := range allNodesConfig.Nodes() {
-		node.NewView(context.Background(), state)
+		node.ReceiveRequestFromClient(context.Background(), state)
 	}
 }

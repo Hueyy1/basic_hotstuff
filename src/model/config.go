@@ -20,7 +20,9 @@ type HttpConfig struct {
 }
 
 type ReplicaConfig struct {
-	Id   int    `yaml:"id" mapstructure:"id"`
-	Host string `yaml:"host" mapstructure:"host"`
-	Port int    `yaml:"port" mapstructure:"port"`
+	Id          int    `yaml:"id" mapstructure:"id"`
+	Host        string `yaml:"host" mapstructure:"host"`
+	Port        int    `yaml:"port" mapstructure:"port"`
+	PrivateFile int    `yaml:"privateFile" mapstructure:"privateFile"`
+	PublicFile  int    `yaml:"publicFile" mapstructure:"publicFile"`
 }

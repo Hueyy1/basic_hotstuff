@@ -2,7 +2,6 @@ package model
 
 import (
 	"crypto/ecdsa"
-	"crypto/tls"
 	"crypto/x509"
 	"hxy352/src/types"
 )
@@ -34,7 +33,7 @@ type ReplicaConf struct {
 	Certificate          []byte
 	CertificateKey       []byte
 	UseTLS               bool
-	RootCAs              *x509.CertPool
-	PrivKey              types.PrivateKey
-	TlsCertificate       tls.Certificate
+	//RootCAs              *x509.CertPool
+	PrivKey types.PrivateKey
+	//TlsCertificate       tls.Certificate
 }

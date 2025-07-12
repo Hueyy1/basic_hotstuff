@@ -73,12 +73,21 @@ enum BasicMessageType {
 
 message Msg {
   BasicMessageType Type = 1; // Type of the message
-  oneof Payload {
-    Block Block = 2; // Block for commit and pre-commit
-    PartialCert PartialCert = 3; // Partial certificate for prepare and prepare vote
-    Request Request = 4; // Request from client
-  }
+  uint64 View = 2;
+  Block Block = 3;
+  PartialCert PartialCert = 4;
+  QuorumCert QC = 5;
+  Request Request = 6; // Request from client
 }
+
+//message Msg {
+//  BasicMessageType Type = 1; // Type of the message
+//  oneof Payload {
+//    Block Block = 2; // Block for commit and pre-commit
+//    PartialCert PartialCert = 3; // Partial certificate for prepare and prepare vote
+//    Request Request = 4; // Request from client
+//  }
+//}
 
 message BlockHash {
   bytes Hash = 1;
@@ -86,11 +95,12 @@ message BlockHash {
 
 message Block {
   bytes Parent = 1;
-  QuorumCert QC = 2;
+  bytes Hash = 2;
   uint64 View = 3;
   bytes Command = 4;
-  uint32 Proposer = 5;
-  google.protobuf.Timestamp Timestamp =6;
+  QuorumCert QC = 5;
+  uint32 Proposer = 6;
+  google.protobuf.Timestamp Timestamp =7;
 }
 
 message BLS12Signature {
@@ -123,6 +133,7 @@ message QuorumCert {
   QuorumSignature Sig = 1;
   uint64 View = 2;
   bytes Hash = 3;
+  BasicMessageType Type = 4;
 }
 
 message SyncInfo {
