@@ -398,7 +398,7 @@ temp
 main
 configs/config-log.yaml
 configs/config-map.yaml
-configs/foreign-phone-location.yaml
+configs/config-map-docker.yaml
 configs/*.pem
 configs/*.csr
 configs/*.key

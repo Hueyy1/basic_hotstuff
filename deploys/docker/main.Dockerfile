@@ -1,7 +1,7 @@
-FROM hxy352-go-builder:1.24-alpine3.22 as build
+FROM hxy352-go-builder:1.24-alpine3.22 AS build
 
 ENV GO111MODULE=on
-ENV GOPROXY=https://goproxy.cn
+#ENV GOPROXY=https://goproxy.cn
 
 RUN mkdir -p /data
 
@@ -11,7 +11,7 @@ RUN cd /data/src \
 &&  go mod tidy -compat=1.24 \
 &&  go build -a -ldflags '-w -s -extldflags "-static"' -tags 'musl' -o /data/main
 
-FROM hxy352-base:latest as runtime
+FROM hxy352-base:latest AS runtime
 
 COPY --from=build /data/main ${APP_HOME}/main
 COPY ./docker-entrypoint.sh /docker-entrypoint.sh

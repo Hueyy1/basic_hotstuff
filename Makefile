@@ -10,3 +10,9 @@ base: deploys/docker/base.Dockerfile
 
 build: base deploys/docker/main.Dockerfile
 	docker build -f=deploys/docker/main.Dockerfile --tag=${IMAGE_NAME_MAIN}:latest ./
+
+run-basic-hotstuff:
+	docker-compose -f "deploys/compose/basic.yaml" -p hxy352-hotstuff up -d
+
+stop-basic-hotstuff:
+	docker-compose -f "deploys/compose/basic.yaml" -p hxy352-hotstuff stop
