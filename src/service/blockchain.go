@@ -1,6 +1,7 @@
 package service
 
 import (
+	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/types"
 	"sync"
@@ -153,3 +154,31 @@ func (chain *blockChain) Extends(block, target *model.Block) bool {
 //}
 //
 //var _ modules.BlockChain = (*blockChain)(nil)
+
+func (chain *blockChain) Clean(block *model.Block) {
+
+	parent, ok := chain.Get(block.Parent())
+	if !ok {
+		log.Warnf("BlockChain Clean: Get parent block err")
+		return
+	}
+
+	grandParent, ok := chain.Get(parent.Parent())
+	if !ok {
+		log.Warnf("BlockChain Clean: Get grandParent block err")
+		return
+	}
+
+	target, ok := chain.Get(grandParent.Parent())
+	if !ok {
+		log.Warnf("BlockChain Clean: Get target clean block err")
+		return
+	}
+
+	chain.mut.Lock()
+	defer chain.mut.Unlock()
+	delete(chain.blocks, target.Hash())
+	delete(chain.blockAtHeight, target.View())
+
+	log.Debugf("BlockChain Clean result: blocks len: %d; blockAtHeight len: %d", len(chain.blocks), len(chain.blockAtHeight))
+}

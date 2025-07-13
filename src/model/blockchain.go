@@ -21,4 +21,6 @@ type BlockChain interface {
 	//// Prunes blocks from the in-memory tree up to the specified height.
 	//// Returns a set of forked blocks (blocks that were on a different branch, and thus not committed).
 	//PruneToHeight(height types.View) (forkedBlocks []*Block)
+
+	Clean(block *Block)
 }

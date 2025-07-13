@@ -19,8 +19,8 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-    networks:
-      - network
+#    networks:
+#      - network
 
   bhs-replica1:
     image: hxy352-main:latest
@@ -37,8 +37,8 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-    networks:
-      - network
+#    networks:
+#      - network
 
   bhs-replica2:
     image: hxy352-main:latest
@@ -55,8 +55,8 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-    networks:
-      - network
+#    networks:
+#      - network
 
   bhs-replica3:
     image: hxy352-main:latest
@@ -73,8 +73,8 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-    networks:
-      - network
+#    networks:
+#      - network
 
   bhs-client:
     image: hxy352-main:latest
@@ -90,17 +90,17 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-    networks:
-      - network
+#    networks:
+#      - network
     depends_on:
       - bhs-replica0
       - bhs-replica1
       - bhs-replica2
       - bhs-replica3
 
-networks:
-  network:
-    driver: bridge
-#    ipam:
-#      config:
-#        - subnet: 172.20.0.0/16
+#networks:
+#  network:
+#    driver: bridge
+##    ipam:
+##      config:
+##        - subnet: 172.20.0.0/16

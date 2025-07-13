@@ -627,6 +627,9 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	// clean votes after create QC
 	delete(hs.verifiedCommitVotes, pc.BlockHash())
 
+	// clean block
+	hs.BlockChain.Clean(block)
+
 	// send decide
 
 	hs.initAllReplicaClients()
@@ -692,6 +695,9 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 
 	// exec cmd
 	log.Infof("OnReceiveDecide: exec cmd: %s %s", msg.GetBlock().Hash, block.Command())
+
+	// clean block
+	hs.BlockChain.Clean(block)
 
 	hs.mut.Lock()
 	defer hs.mut.Unlock()
