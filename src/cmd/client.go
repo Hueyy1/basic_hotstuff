@@ -52,6 +52,9 @@ func startBasicHotStuffClient(cmd *cobra.Command, _ []string) (err error) {
 		}
 	}()
 
+	// let replicas get ready...
+	time.Sleep(2 * time.Second)
+
 	for {
 		conn, err := net.DialTimeout("tcp", addr, time.Second)
 		if err == nil {
@@ -76,13 +79,18 @@ func startBasicHotStuffClient(cmd *cobra.Command, _ []string) (err error) {
 		fmt.Sprintf("%s:%d", gCfg.Replica[0].Host, gCfg.Replica[0].Port),
 	}
 
-	// Create a configuration including all nodes
-	allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(addrs))
-	if err != nil {
-		log.Panicf("error creating read config:%v", err)
+	var node *basichotstuffpb.Node
+	for {
+		allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(addrs))
+		if err != nil {
+			log.Warnf("error creating read config:%v, sleep 2s", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		node = allNodesConfig.Nodes()[0]
+		break
 	}
 
-	node := allNodesConfig.Nodes()[0]
 	i := 0
 
 	for {

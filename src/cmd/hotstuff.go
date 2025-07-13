@@ -10,6 +10,8 @@ import (
 	"hxy352/src/server"
 	"hxy352/src/types"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 )
 
 var hsAnnotations = map[string]string{"app": "hotstuff", "isGraceful": "true"}
@@ -37,7 +39,11 @@ func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
 	id, _ := cmd.Flags().GetInt("id")
 	gCfg.Id = types.ID(id)
 
-	log.Debugf("id is %d", id)
+	if id == 0 {
+		go func() {
+			http.ListenAndServe("localhost:6060", nil)
+		}()
+	}
 
 	err = keygen.LoadPemFile(&gCfg)
 	if err != nil {

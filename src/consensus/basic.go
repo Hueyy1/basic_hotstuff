@@ -44,6 +44,9 @@ type BasicHotStuff struct {
 	verifiedCommitVotes    map[types.Hash][]types.PartialCert
 
 	highQCTmp []types.QuorumCert
+
+	onceReplica sync.Once
+	onceClient  sync.Once
 }
 
 func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStuff {
@@ -71,6 +74,9 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		verifiedPrepareVotes:   make(map[types.Hash][]types.PartialCert),
 		verifiedPreCommitVotes: make(map[types.Hash][]types.PartialCert),
 		verifiedCommitVotes:    make(map[types.Hash][]types.PartialCert),
+
+		onceReplica: sync.Once{},
+		onceClient:  sync.Once{},
 	}
 	var err error
 	hs.HighQC, err = hs.crypto.CreateQuorumCert(model.GetGenesis(), []types.PartialCert{})
@@ -79,9 +85,6 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 	}
 	hs.PreCommitQC = hs.HighQC
 
-	// init all replicas except myself
-	//hs.initAllReplicaClients()
-
 	return hs
 }
 
@@ -89,7 +92,7 @@ func (hs *BasicHotStuff) LockedQC() types.QuorumCert {
 	return hs.PreCommitQC
 }
 
-func (hs *BasicHotStuff) initAllReplicaClients() {
+func (hs *BasicHotStuff) InitAllReplicaClients() {
 
 	// todo: find a solution to lazy load !!!!!
 
@@ -100,35 +103,61 @@ func (hs *BasicHotStuff) initAllReplicaClients() {
 	//desc = "transport: Error while dialing: dial tcp 127.0.0.1:8002:
 	//connect: can't assign requested address"
 
-	sync.OnceFunc(func() {
-		mgr := basichotstuffpb.NewManager(
-			gorums.WithGrpcDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-			),
-		)
+	mgr := basichotstuffpb.NewManager(
+		gorums.WithGrpcDialOptions(
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		),
+	)
 
-		var adds []string
-		for _, config := range hs.gConf.Replica {
-			if types.ID(config.Id) == hs.Conf.Id {
-				// Skip myself
-				continue
-			} else {
-				adds = append(adds, fmt.Sprintf("%s:%d", config.Host, config.Port))
-			}
+	var adds []string
+	for _, config := range hs.gConf.Replica {
+		if types.ID(config.Id) == hs.Conf.Id {
+			// Skip myself
+			continue
+		} else {
+			adds = append(adds, fmt.Sprintf("%s:%d", config.Host, config.Port))
 		}
+	}
 
-		// Create a configuration including all nodes
-		//log.Debugf("other replica adds: %v", adds)
-		allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(adds))
-		if err != nil {
-			log.Panic(err)
-		}
+	allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(adds))
+	if err != nil {
+		log.Panic(err)
+	}
 
-		hs.Nodes = make([]*basichotstuffpb.Node, len(adds))
-		hs.Nodes = allNodesConfig.Nodes()
+	hs.Nodes = make([]*basichotstuffpb.Node, len(adds))
+	hs.Nodes = allNodesConfig.Nodes()
 
-	})()
+	log.Infof("InitAllReplicaClients finished")
+}
 
+func (hs *BasicHotStuff) GetNodes() []*basichotstuffpb.Node {
+	hs.onceReplica.Do(hs.InitAllReplicaClients)
+	return hs.Nodes
+}
+
+func (hs *BasicHotStuff) InitClient() {
+	mgr := clientpb.NewManager(
+		gorums.WithGrpcDialOptions(
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		),
+	)
+
+	var adds []string
+	adds = append(adds, fmt.Sprintf("%s:%d", hs.gConf.Client.Host, hs.gConf.Client.Port))
+
+	allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(adds))
+	if err != nil {
+		log.Panic(err)
+	}
+
+	hs.Client = allNodesConfig.Nodes()[0]
+
+	log.Infof("InitClient finished")
+}
+
+func (hs *BasicHotStuff) GetClient() *clientpb.Node {
+	hs.onceClient.Do(hs.InitClient)
+	return hs.Client
 }
 
 func (hs *BasicHotStuff) GetLeader() types.ID {
@@ -155,8 +184,6 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 
 	pbBlock := basichotstuffpb.BlockToProto(block)
 
-	hs.initAllReplicaClients()
-
 	prepareMsg := &basichotstuffpb.Msg{
 		Type:        commonpb.MessageType_Prepare,
 		View:        uint64(hs.CurrentView),
@@ -165,7 +192,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 		QC:          basichotstuffpb.QuorumCertToProto(hs.HighQC),
 	}
 
-	for _, node := range hs.Nodes {
+	for _, node := range hs.GetNodes() {
 		node.Prepare(context.Background(), prepareMsg)
 	}
 
@@ -315,9 +342,7 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 
 	// send pre-commit
 
-	hs.initAllReplicaClients()
-
-	for _, node := range hs.Nodes {
+	for _, node := range hs.GetNodes() {
 		node.PreCommit(context.Background(), &basichotstuffpb.Msg{
 			Type:        commonpb.MessageType_PreCommit,
 			View:        uint64(hs.CurrentView),
@@ -470,8 +495,6 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 
 	// send pre-commit
 
-	hs.initAllReplicaClients()
-
 	commitMsg := &basichotstuffpb.Msg{
 		Type:        commonpb.MessageType_Commit,
 		View:        uint64(hs.CurrentView),
@@ -480,7 +503,7 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 		QC:          basichotstuffpb.QuorumCertToProto(qc),
 	}
 
-	for _, node := range hs.Nodes {
+	for _, node := range hs.GetNodes() {
 		node.Commit(context.Background(), commitMsg)
 	}
 
@@ -632,8 +655,6 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 
 	// send decide
 
-	hs.initAllReplicaClients()
-
 	decideMsg := &basichotstuffpb.Msg{
 		Type:        commonpb.MessageType_Decide,
 		View:        uint64(hs.CurrentView),
@@ -642,7 +663,7 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 		QC:          basichotstuffpb.QuorumCertToProto(qc),
 	}
 
-	for _, node := range hs.Nodes {
+	for _, node := range hs.GetNodes() {
 		node.Decide(context.Background(), decideMsg)
 	}
 
@@ -814,11 +835,10 @@ func (hs *BasicHotStuff) GetLeaderAddress() string {
 }
 
 func (hs *BasicHotStuff) Unicast(req *basichotstuffpb.Request) {
-	hs.initAllReplicaClients()
 	address := hs.GetLeaderAddress()
 	a1, _ := normalizeAddr(address)
 
-	for _, node := range hs.Nodes {
+	for _, node := range hs.GetNodes() {
 		a2, _ := normalizeAddr(node.Address())
 		if a1 == a2 {
 			node.SendRequest(context.Background(), req)
@@ -830,11 +850,10 @@ func (hs *BasicHotStuff) Unicast(req *basichotstuffpb.Request) {
 
 // GetLeaderNode get leader node
 func (hs *BasicHotStuff) GetLeaderNode() *basichotstuffpb.Node {
-	hs.initAllReplicaClients()
 	leaderAddress := hs.GetLeaderAddress()
 	a1, _ := normalizeAddr(leaderAddress)
 
-	for _, node := range hs.Nodes {
+	for _, node := range hs.GetNodes() {
 		//log.Debugf("node.Address: %s, leaderAddress: %s", node.Address(), leaderAddress)
 		a2, _ := normalizeAddr(node.Address())
 		if a1 == a2 {
@@ -886,28 +905,14 @@ func (hs *BasicHotStuff) VoteMyself(pc *types.PartialCert, voteType commonpb.Mes
 
 func (hs *BasicHotStuff) SendResponse(cmd string) {
 
-	sync.OnceFunc(func() {
-		mgr := clientpb.NewManager(
-			gorums.WithGrpcDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-			),
-		)
-
-		var adds []string
-		adds = append(adds, fmt.Sprintf("%s:%d", hs.gConf.Client.Host, hs.gConf.Client.Port))
-		allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(adds))
-		if err != nil {
-			log.Panic(err)
-		}
-
-		hs.Client = allNodesConfig.Nodes()[0]
-	})()
-
 	res := &clientpb.Response{
 		Result: "OK",
 		Cmd:    cmd,
 	}
-	hs.Client.SendResponse(context.Background(), res)
+
+	log.Infof("try get client: %v", hs.GetClient())
+
+	hs.GetClient().SendResponse(context.Background(), res)
 
 	log.Infof("Sending response: %s", res.String())
 
