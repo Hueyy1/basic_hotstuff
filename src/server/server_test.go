@@ -6,6 +6,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"hxy352/src/proto/basichotstuffpb"
+	"hxy352/src/proto/commonpb"
 	"log"
 	"testing"
 )
@@ -73,7 +74,7 @@ func TestNewRequest(t *testing.T) {
 		log.Fatalln("error creating read config:", err)
 	} // Test state
 	state := &basichotstuffpb.Msg{
-		Type: basichotstuffpb.BasicMessageType_Unknown,
+		Type: commonpb.MessageType_Unknown,
 		Request: &basichotstuffpb.Request{
 			Cmd:           "12345444444",
 			ClientAddress: "127.0.0.1:9000",

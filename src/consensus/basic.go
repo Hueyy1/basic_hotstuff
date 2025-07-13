@@ -11,6 +11,8 @@ import (
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/proto/basichotstuffpb"
+	"hxy352/src/proto/clientpb"
+	"hxy352/src/proto/commonpb"
 	"hxy352/src/service"
 	"hxy352/src/types"
 	"net"
@@ -24,7 +26,8 @@ type BasicHotStuff struct {
 	Timeout time.Duration
 	crypto  crypto.Crypto
 
-	Nodes []*basichotstuffpb.Node // All nodes in the configuration
+	Nodes  []*basichotstuffpb.Node // All nodes in the configuration
+	Client *clientpb.Node          // All nodes in the configuration
 
 	BlockChain model.BlockChain
 
@@ -90,6 +93,13 @@ func (hs *BasicHotStuff) initAllReplicaClients() {
 
 	// todo: find a solution to lazy load !!!!!
 
+	// todo: bug, grpc retry
+	// could not create configuration:
+	//connection failed for addr: 127.0.0.1:8002:
+	//starting stream failed: rpc error: code = Unavailable desc = connection error:
+	//desc = "transport: Error while dialing: dial tcp 127.0.0.1:8002:
+	//connect: can't assign requested address"
+
 	sync.OnceFunc(func() {
 		mgr := basichotstuffpb.NewManager(
 			gorums.WithGrpcDialOptions(
@@ -148,7 +158,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 	hs.initAllReplicaClients()
 
 	prepareMsg := &basichotstuffpb.Msg{
-		Type:        basichotstuffpb.BasicMessageType_Prepare,
+		Type:        commonpb.MessageType_Prepare,
 		View:        uint64(hs.CurrentView),
 		Block:       pbBlock,
 		PartialCert: nil,
@@ -170,7 +180,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 			return
 		}
 
-		hs.VoteMyself(&pc, basichotstuffpb.BasicMessageType_PrepareVote)
+		hs.VoteMyself(&pc, commonpb.MessageType_PrepareVote)
 	}()
 
 	return
@@ -180,7 +190,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePrepare: %.8s", msg.GetBlock().Hash)
 
-	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_Prepare) {
+	if !hs.MatchingMsg(msg, commonpb.MessageType_Prepare) {
 		log.Errorf("OnReceivePrepare: msg does not match: %s", msg.GetType().String())
 		return
 	}
@@ -223,7 +233,7 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 	pCert := basichotstuffpb.PartialCertToProto(pc)
 
 	prepareVote := &basichotstuffpb.Msg{
-		Type:        basichotstuffpb.BasicMessageType_PrepareVote,
+		Type:        commonpb.MessageType_PrepareVote,
 		View:        uint64(hs.CurrentView),
 		Block:       pbBlock,
 		PartialCert: pCert,
@@ -242,7 +252,7 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePrepareVote: %.8s", msg.GetBlock().Hash)
 
-	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_PrepareVote) {
+	if !hs.MatchingMsg(msg, commonpb.MessageType_PrepareVote) {
 		log.Errorf("prepare vote msg does not match: %s", msg.GetType().String())
 		return
 	}
@@ -309,7 +319,7 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 
 	for _, node := range hs.Nodes {
 		node.PreCommit(context.Background(), &basichotstuffpb.Msg{
-			Type:        basichotstuffpb.BasicMessageType_PreCommit,
+			Type:        commonpb.MessageType_PreCommit,
 			View:        uint64(hs.CurrentView),
 			Block:       msg.GetBlock(),
 			PartialCert: nil,
@@ -326,7 +336,7 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 			return
 		}
 
-		hs.VoteMyself(&preCommitPC, basichotstuffpb.BasicMessageType_PreCommitVote)
+		hs.VoteMyself(&preCommitPC, commonpb.MessageType_PreCommitVote)
 	}()
 
 }
@@ -334,7 +344,7 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePreCommit: %.8s", msg.GetBlock().Hash)
 
-	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_PreCommit) {
+	if !hs.MatchingMsg(msg, commonpb.MessageType_PreCommit) {
 		log.Errorf("OnReceivePreCommit: msg does not match: %s", msg.GetType().String())
 		return
 	}
@@ -378,7 +388,7 @@ func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 	pCert := basichotstuffpb.PartialCertToProto(pc)
 
 	preCommitVote := &basichotstuffpb.Msg{
-		Type:        basichotstuffpb.BasicMessageType_PreCommitVote,
+		Type:        commonpb.MessageType_PreCommitVote,
 		View:        uint64(hs.CurrentView),
 		Block:       msg.GetBlock(),
 		PartialCert: pCert,
@@ -400,7 +410,7 @@ func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePreCommitVote: %.8s", msg.GetBlock().Hash)
 
-	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_PreCommitVote) {
+	if !hs.MatchingMsg(msg, commonpb.MessageType_PreCommitVote) {
 		log.Errorf("OnReceivePreCommitVote: preCommit vote msg does not match: %s", msg.GetType().String())
 		return
 	}
@@ -463,7 +473,7 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 	hs.initAllReplicaClients()
 
 	commitMsg := &basichotstuffpb.Msg{
-		Type:        basichotstuffpb.BasicMessageType_Commit,
+		Type:        commonpb.MessageType_Commit,
 		View:        uint64(hs.CurrentView),
 		Block:       msg.GetBlock(),
 		PartialCert: nil,
@@ -483,7 +493,7 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 			return
 		}
 
-		hs.VoteMyself(&commitPC, basichotstuffpb.BasicMessageType_CommitVote)
+		hs.VoteMyself(&commitPC, commonpb.MessageType_CommitVote)
 	}()
 
 }
@@ -492,7 +502,7 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveCommit: %.8s", msg.GetBlock().Hash)
 
-	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_Commit) {
+	if !hs.MatchingMsg(msg, commonpb.MessageType_Commit) {
 		log.Errorf("OnReceiveCommit: msg does not match: %s", msg.GetType().String())
 		return
 	}
@@ -536,7 +546,7 @@ func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 	pCert := basichotstuffpb.PartialCertToProto(pc)
 
 	commitVote := &basichotstuffpb.Msg{
-		Type:        basichotstuffpb.BasicMessageType_CommitVote,
+		Type:        commonpb.MessageType_CommitVote,
 		View:        uint64(hs.CurrentView),
 		Block:       msg.GetBlock(),
 		PartialCert: pCert,
@@ -559,7 +569,7 @@ func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveCommitVote: %.8s", msg.GetBlock().Hash)
 
-	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_CommitVote) {
+	if !hs.MatchingMsg(msg, commonpb.MessageType_CommitVote) {
 		log.Errorf("OnReceiveCommitVote: preCommit vote msg does not match: %s", msg.GetType().String())
 		return
 	}
@@ -622,7 +632,7 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	hs.initAllReplicaClients()
 
 	decideMsg := &basichotstuffpb.Msg{
-		Type:        basichotstuffpb.BasicMessageType_Decide,
+		Type:        commonpb.MessageType_Decide,
 		View:        uint64(hs.CurrentView),
 		Block:       msg.GetBlock(),
 		PartialCert: nil,
@@ -636,6 +646,9 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	// exec cmd
 	log.Infof("OnReceiveCommitVote: exec cmd: %s %s", msg.GetBlock().Hash, block.Command())
 
+	// send response
+	hs.SendResponse(string(block.Command()))
+
 	// view number + 1
 	hs.CurrentView += 1
 
@@ -643,11 +656,11 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	hs.SendNewView()
 }
 
-// Decide is called to decide on a block.
+// OnReceiveDecide is called to decide on a block.
 func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveDecide: %.8s", msg.GetBlock().Hash)
 
-	if !hs.MatchingMsg(msg, basichotstuffpb.BasicMessageType_Decide) {
+	if !hs.MatchingMsg(msg, commonpb.MessageType_Decide) {
 		log.Errorf("OnReceiveDecide: msg does not match: %s", msg.GetType().String())
 		return
 	}
@@ -702,7 +715,7 @@ func (hs *BasicHotStuff) SendNewView() {
 	log.Infof("OnSendNewView: sending new view to leader: %d", l)
 
 	hs.GetLeaderNode().NewView(context.Background(), &basichotstuffpb.Msg{
-		Type:        basichotstuffpb.BasicMessageType_NewView,
+		Type:        commonpb.MessageType_NewView,
 		View:        uint64(hs.CurrentView),
 		Block:       nil,
 		PartialCert: nil,
@@ -744,10 +757,21 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	// clean hs.highQCTmp
 	hs.highQCTmp = hs.highQCTmp[:0]
 
+	// clean votes
+	cleanFunc := func(m map[types.Hash][]types.PartialCert) {
+		for k := range m {
+			delete(m, k)
+		}
+	}
+	cleanFunc(hs.verifiedPrepareVotes)
+	cleanFunc(hs.verifiedPreCommitVotes)
+	cleanFunc(hs.verifiedCommitVotes)
+	log.Debug("OnReceiveNewView: clean all votes")
+
 	log.Infof("OnReceiveNewView: new view finished")
 }
 
-func (hs *BasicHotStuff) MatchingMsg(msg *basichotstuffpb.Msg, msgType basichotstuffpb.BasicMessageType) bool {
+func (hs *BasicHotStuff) MatchingMsg(msg *basichotstuffpb.Msg, msgType commonpb.MessageType) bool {
 	return msg.GetType() == msgType && msg.GetView() == uint64(hs.CurrentView)
 }
 
@@ -783,7 +807,7 @@ func (hs *BasicHotStuff) GetLeaderAddress() string {
 	return fmt.Sprintf("%s:%d", hs.gConf.Replica[leaderIdx].Host, hs.gConf.Replica[leaderIdx].Port)
 }
 
-func (hs *BasicHotStuff) Unicast(msg *basichotstuffpb.Msg) {
+func (hs *BasicHotStuff) Unicast(req *basichotstuffpb.Request) {
 	hs.initAllReplicaClients()
 	address := hs.GetLeaderAddress()
 	a1, _ := normalizeAddr(address)
@@ -791,7 +815,7 @@ func (hs *BasicHotStuff) Unicast(msg *basichotstuffpb.Msg) {
 	for _, node := range hs.Nodes {
 		a2, _ := normalizeAddr(node.Address())
 		if a1 == a2 {
-			node.ReceiveRequestFromClient(context.Background(), msg)
+			node.SendRequest(context.Background(), req)
 			return
 		}
 	}
@@ -828,7 +852,7 @@ func normalizeAddr(addr string) (string, error) {
 	return net.JoinHostPort(ipAddr.IP.String(), port), nil
 }
 
-func (hs *BasicHotStuff) VoteMyself(pc *types.PartialCert, voteType basichotstuffpb.BasicMessageType) {
+func (hs *BasicHotStuff) VoteMyself(pc *types.PartialCert, voteType commonpb.MessageType) {
 	if hs.GetLeader() != hs.Conf.Id {
 		return
 	}
@@ -837,19 +861,48 @@ func (hs *BasicHotStuff) VoteMyself(pc *types.PartialCert, voteType basichotstuf
 	defer hs.mut.Unlock()
 
 	switch voteType {
-	case basichotstuffpb.BasicMessageType_PrepareVote:
+	case commonpb.MessageType_PrepareVote:
 		votes := hs.verifiedPrepareVotes[pc.BlockHash()]
 		votes = append(votes, *pc)
 		hs.verifiedPrepareVotes[pc.BlockHash()] = votes
-	case basichotstuffpb.BasicMessageType_PreCommitVote:
+	case commonpb.MessageType_PreCommitVote:
 		votes := hs.verifiedPreCommitVotes[pc.BlockHash()]
 		votes = append(votes, *pc)
 		hs.verifiedPreCommitVotes[pc.BlockHash()] = votes
-	case basichotstuffpb.BasicMessageType_CommitVote:
+	case commonpb.MessageType_CommitVote:
 		votes := hs.verifiedCommitVotes[pc.BlockHash()]
 		votes = append(votes, *pc)
 		hs.verifiedCommitVotes[pc.BlockHash()] = votes
 	default:
 		log.Warnf("PrepareVoteMyself: unknown vote type: %v", voteType)
 	}
+}
+
+func (hs *BasicHotStuff) SendResponse(cmd string) {
+
+	sync.OnceFunc(func() {
+		mgr := clientpb.NewManager(
+			gorums.WithGrpcDialOptions(
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+			),
+		)
+
+		var adds []string
+		adds = append(adds, fmt.Sprintf("%s:%d", hs.gConf.Client.Host, hs.gConf.Client.Port))
+		allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(adds))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		hs.Client = allNodesConfig.Nodes()[0]
+	})()
+
+	res := &clientpb.Response{
+		Result: "OK",
+		Cmd:    cmd,
+	}
+	hs.Client.SendResponse(context.Background(), res)
+
+	log.Infof("Sending response: %s", res.String())
+
 }

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package commonpb;
+
+option go_package = "hxy352/src/proto/commonpb";
+
+enum MessageType {
+  Unknown = 0;
+  NewView = 1;
+  Prepare = 2;
+  PrepareVote = 3;
+  PreCommit = 4;
+  PreCommitVote = 5;
+  Commit = 6;
+  CommitVote = 7;
+  Decide = 8;
+}

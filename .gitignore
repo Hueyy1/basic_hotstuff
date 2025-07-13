@@ -404,4 +404,3 @@ configs/*.csr
 configs/*.key
 
 files
-certs

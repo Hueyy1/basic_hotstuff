@@ -49,7 +49,7 @@ func (s *BasicHotStuffImpl) NewView(ctx gorums.ServerCtx, msg *basichotstuffpb.M
 	//
 	//// todo: how to wait n - f new-view messages
 	//
-	//if service.MsgValidate.MatchingMsg(request, basichotstuffpb.BasicMessageType_NewView, s.CurrentView()-1) == false {
+	//if service.MsgValidate.MatchingMsg(request, commonpb.MessageType_NewView, s.CurrentView()-1) == false {
 	//	log.Errorf("NewView message does not match: %+v", request)
 	//	return
 	//}
@@ -166,11 +166,8 @@ func (s *BasicHotStuffImpl) Decide(ctx gorums.ServerCtx, msg *basichotstuffpb.Ms
 	s.Consensus.OnReceiveDecide(msg)
 }
 
-func (s *BasicHotStuffImpl) ReceiveRequestFromClient(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
-
-	req := msg.GetRequest()
-
-	log.Debugf("Got request msg, content:%s", req.String())
+func (s *BasicHotStuffImpl) SendRequest(ctx gorums.ServerCtx, req *basichotstuffpb.Request) {
+	log.Infof("Got request msg, content:%s", req.String())
 
 	if req == nil {
 		log.Warnf("ReceiveRequestFromClient request is nil")
@@ -181,7 +178,7 @@ func (s *BasicHotStuffImpl) ReceiveRequestFromClient(ctx gorums.ServerCtx, msg *
 	if s.Consensus.GetLeader() != s.Consensus.Conf.Id {
 		log.Warnf("current replica is not leader, current leader is %d, resend to leader", s.Consensus.GetLeader())
 		// send to leader
-		s.Consensus.Unicast(msg)
+		s.Consensus.Unicast(req)
 		return
 	}
 
@@ -193,6 +190,4 @@ func (s *BasicHotStuffImpl) ReceiveRequestFromClient(ctx gorums.ServerCtx, msg *
 	//pbBlock := s.Consensus.SendPrepare(req)
 	s.Consensus.SendPrepare(req)
 
-	// vote self
-	//s.Consensus.OnReceivePrepareVote(pbBlock)
 }

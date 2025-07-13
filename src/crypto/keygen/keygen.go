@@ -153,14 +153,12 @@ func LoadPemFile(gConf *model.Config) (err error) {
 			Conf: c,
 		}
 
-		privateKeyFile := gConf.FilePath["certs"] + "/" + c.PrivateFile
-		r.PriKey, err = ReadPrivateKeyFile(privateKeyFile)
+		r.PriKey, err = ReadPrivateKeyFile(c.PrivateFile)
 		if err != nil {
 			return err
 		}
 
-		publicKeyFile := gConf.FilePath["certs"] + "/" + c.PublicFile
-		r.PubKey, err = ReadPublicKeyFile(publicKeyFile)
+		r.PubKey, err = ReadPublicKeyFile(c.PublicFile)
 		if err != nil {
 			return err
 		}
@@ -222,13 +220,11 @@ func GenerateKeyChain(gConf *model.Config) {
 		//	panic(err)
 		//}
 
-		privateKeyPath := gConf.FilePath["certs"] + "/" + rep.PrivateFile
-		publicKeyPath := gConf.FilePath["certs"] + "/" + rep.PublicFile
-		err = WritePrivateKeyFile(privateKey, privateKeyPath)
+		err = WritePrivateKeyFile(privateKey, rep.PrivateFile)
 		if err != nil {
 			panic(err)
 		}
-		err = WritePublicKeyFile(publicKey, publicKeyPath)
+		err = WritePublicKeyFile(publicKey, rep.PublicFile)
 		if err != nil {
 			panic(err)
 		}

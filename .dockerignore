@@ -364,4 +364,3 @@ $RECYCLE.BIN/
 */configs/*.pem
 */configs/*.csr
 */configs/*.key
-*/certs/*
