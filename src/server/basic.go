@@ -115,21 +115,6 @@ func (s *BasicHotStuffImpl) SendRequest(ctx gorums.ServerCtx, req *basichotstuff
 		return
 	}
 
-	// check if leader, otherwise send to leader
-	if s.Consensus.GetLeader() != s.Consensus.Conf.Id {
-		log.Warnf("current replica is not leader, current leader is %d, resend to leader", s.Consensus.GetLeader())
-		// send to leader
-		s.Consensus.Unicast(req)
-		return
-	}
-
-	// todo: check if view changing, if so, return
-	//if bhs.CurExec.Node != nil || bhs.View.ViewChanging {
-	//	return
-	//}
-
-	//pbBlock := s.Consensus.SendPrepare(req)
-
 	s.Consensus.MsgChan <- req
 
 	return

@@ -35,8 +35,8 @@ type BasicHotStuff struct {
 
 	mut sync.RWMutex // to protect the following
 
-	ViewChanging    bool
-	ViewChangingRes bool
+	ViewChanging   bool
+	ViewChangeCond *sync.Cond
 
 	CurrentView types.View
 	PrepareQC   types.QuorumCert
@@ -92,6 +92,8 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 	}
 	hs.PreCommitQC = hs.HighQC
 
+	hs.ViewChangeCond = sync.NewCond(&hs.mut)
+
 	return hs
 }
 
@@ -104,9 +106,11 @@ func (hs *BasicHotStuff) HandleMsg() {
 			switch tmp.(type) {
 
 			case *basichotstuffpb.Request:
-				hs.SendPrepare(tmp.(*basichotstuffpb.Request))
+				go hs.SendPrepare(tmp.(*basichotstuffpb.Request))
 
 			case *basichotstuffpb.Msg:
+
+				// todo: if use go
 
 				msg := tmp.(*basichotstuffpb.Msg)
 
@@ -232,6 +236,23 @@ func (hs *BasicHotStuff) CreateLeaf(parentHash types.Hash, cert types.QuorumCert
 
 // SendPrepare is called to propose a new block.
 func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
+
+	hs.mut.Lock()
+	for hs.ViewChanging {
+		// 等待 view change 完成
+		hs.ViewChangeCond.Wait()
+	}
+	// 此时 view 已经稳定
+	hs.mut.Unlock()
+
+	// check if leader, otherwise send to leader
+	l := hs.GetLeader()
+	if l != hs.Conf.Id {
+		log.Warnf("current replica is not leader, current leader is %d, resend... current view: %d", l, hs.CurrentView)
+		// send to leader
+		hs.Unicast(cmd)
+		return
+	}
 
 	block := hs.CreateLeaf(hs.HighQC.BlockHash(), hs.HighQC, types.Command(cmd.GetCmd()))
 
@@ -748,7 +769,7 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	hs.SendNewView()
 
 	// todo: if
-	// send response
+	// send response after new-view
 	hs.SendResponse(string(block.Command()))
 }
 
@@ -798,6 +819,11 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	// view number + 1
 	hs.CurrentView += 1
 
+	// leader start change new view
+	if hs.GetLeader() == hs.Conf.Id {
+		hs.ViewChanging = true
+	}
+
 	// todo: update highqc ? is it right?
 	hs.HighQC = qc
 
@@ -829,6 +855,10 @@ func (hs *BasicHotStuff) SendNewView() {
 func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveNewView: receive new view: %d", msg.GetView())
 
+	// todo: bug, during new view cannot process req
+	// todo: bug, 3 or 2 new-views
+	// todo: bug a new view msg will be processed before decide msg.
+
 	//if msg.GetView() < uint64(hs.CurrentView) {
 	//	log.Warnf("OnReceivePreCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
 	//	return
@@ -848,6 +878,7 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	hs.highQCTmp = append(hs.highQCTmp, qc)
 
 	hs.ViewChanging = true
+	log.Infof("OnReceiveNewView: View Changing... get %d qc", len(hs.highQCTmp))
 
 	if len(hs.highQCTmp) < crypto.QuorumSize {
 		return
@@ -878,6 +909,7 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	log.Debug("OnReceiveNewView: clean all votes")
 
 	hs.ViewChanging = false
+	hs.ViewChangeCond.Broadcast() // 唤醒等待请求
 	log.Infof("OnReceiveNewView: new view finished")
 }
 

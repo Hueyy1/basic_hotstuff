@@ -91,7 +91,7 @@ func startBasicHotStuffClient(cmd *cobra.Command, _ []string) (err error) {
 		break
 	}
 
-	i := 0
+	i := 1
 
 	for {
 		req := &basichotstuffpb.Request{
