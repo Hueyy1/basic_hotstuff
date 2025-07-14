@@ -26,12 +26,17 @@ type BasicHotStuff struct {
 	Timeout time.Duration
 	crypto  crypto.Crypto
 
+	MsgChan chan any
+
 	Nodes  []*basichotstuffpb.Node // All nodes in the configuration
 	Client *clientpb.Node          // All nodes in the configuration
 
 	BlockChain model.BlockChain
 
 	mut sync.RWMutex // to protect the following
+
+	ViewChanging    bool
+	ViewChangingRes bool
 
 	CurrentView types.View
 	PrepareQC   types.QuorumCert
@@ -57,6 +62,8 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		gConf:      gConf,
 		Timeout:    1 * time.Second, // Default timeout duration
 		BlockChain: bc,
+
+		MsgChan: make(chan any),
 
 		crypto: crypto.CryptoImpl{
 			Conf:       conf,
@@ -86,6 +93,54 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 	hs.PreCommitQC = hs.HighQC
 
 	return hs
+}
+
+func (hs *BasicHotStuff) HandleMsg() {
+
+	for {
+		select {
+		case tmp := <-hs.MsgChan:
+
+			switch tmp.(type) {
+
+			case *basichotstuffpb.Request:
+				hs.SendPrepare(tmp.(*basichotstuffpb.Request))
+
+			case *basichotstuffpb.Msg:
+
+				msg := tmp.(*basichotstuffpb.Msg)
+
+				switch msg.Type {
+
+				case commonpb.MessageType_Prepare:
+					hs.OnReceivePrepare(msg)
+
+				case commonpb.MessageType_PrepareVote:
+					hs.OnReceivePrepareVote(msg)
+
+				case commonpb.MessageType_PreCommit:
+					hs.OnReceivePreCommit(msg)
+
+				case commonpb.MessageType_PreCommitVote:
+					hs.OnReceivePreCommitVote(msg)
+
+				case commonpb.MessageType_Commit:
+					hs.OnReceiveCommit(msg)
+
+				case commonpb.MessageType_CommitVote:
+					hs.OnReceiveCommitVote(msg)
+
+				case commonpb.MessageType_Decide:
+					hs.OnReceiveDecide(msg)
+
+				case commonpb.MessageType_NewView:
+					hs.OnReceiveNewView(msg)
+
+				}
+			}
+		}
+	}
+
 }
 
 func (hs *BasicHotStuff) LockedQC() types.QuorumCert {
@@ -218,7 +273,7 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePrepare: %.8s", msg.GetBlock().Hash)
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_Prepare) {
-		log.Errorf("OnReceivePrepare: msg does not match: %s", msg.GetType().String())
+		log.Errorf("OnReceivePrepare: msg does not match")
 		return
 	}
 
@@ -279,8 +334,13 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePrepareVote: %.8s", msg.GetBlock().Hash)
 
+	if msg.GetView() < uint64(hs.CurrentView) {
+		log.Warnf("OnReceivePrepareVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
+		return
+	}
+
 	if !hs.MatchingMsg(msg, commonpb.MessageType_PrepareVote) {
-		log.Errorf("prepare vote msg does not match: %s", msg.GetType().String())
+		log.Errorf("prepare vote msg does not match")
 		return
 	}
 
@@ -370,7 +430,7 @@ func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePreCommit: %.8s", msg.GetBlock().Hash)
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_PreCommit) {
-		log.Errorf("OnReceivePreCommit: msg does not match: %s", msg.GetType().String())
+		log.Errorf("OnReceivePreCommit: msg does not match")
 		return
 	}
 
@@ -435,8 +495,13 @@ func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePreCommitVote: %.8s", msg.GetBlock().Hash)
 
+	if msg.GetView() < uint64(hs.CurrentView) {
+		log.Warnf("OnReceivePreCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
+		return
+	}
+
 	if !hs.MatchingMsg(msg, commonpb.MessageType_PreCommitVote) {
-		log.Errorf("OnReceivePreCommitVote: preCommit vote msg does not match: %s", msg.GetType().String())
+		log.Panicf("OnReceivePreCommitVote: preCommit vote msg does not match, msg.GetType %s; msg.GetView() %d; hs.CurrentView %d", msg.GetType(), msg.GetView(), hs.CurrentView)
 		return
 	}
 
@@ -526,7 +591,7 @@ func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveCommit: %.8s", msg.GetBlock().Hash)
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_Commit) {
-		log.Errorf("OnReceiveCommit: msg does not match: %s", msg.GetType().String())
+		log.Errorf("OnReceiveCommit: msg does not match")
 		return
 	}
 
@@ -592,8 +657,14 @@ func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveCommitVote: %.8s", msg.GetBlock().Hash)
 
+	// leader has already moved to next view
+	if msg.GetView() < uint64(hs.CurrentView) {
+		log.Warnf("OnReceiveCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
+		return
+	}
+
 	if !hs.MatchingMsg(msg, commonpb.MessageType_CommitVote) {
-		log.Errorf("OnReceiveCommitVote: preCommit vote msg does not match: %s", msg.GetType().String())
+		log.Errorf("OnReceiveCommitVote: Commit vote msg does not match")
 		return
 	}
 
@@ -670,14 +741,15 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	// exec cmd
 	log.Infof("OnReceiveCommitVote: exec cmd: %s %s", msg.GetBlock().Hash, block.Command())
 
-	// send response
-	hs.SendResponse(string(block.Command()))
-
 	// view number + 1
 	hs.CurrentView += 1
 
 	// send new view
 	hs.SendNewView()
+
+	// todo: if
+	// send response
+	hs.SendResponse(string(block.Command()))
 }
 
 // OnReceiveDecide is called to decide on a block.
@@ -685,7 +757,7 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveDecide: %.8s", msg.GetBlock().Hash)
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_Decide) {
-		log.Errorf("OnReceiveDecide: msg does not match: %s", msg.GetType().String())
+		log.Errorf("OnReceiveDecide: msg does not match")
 		return
 	}
 
@@ -726,6 +798,9 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	// view number + 1
 	hs.CurrentView += 1
 
+	// todo: update highqc ? is it right?
+	hs.HighQC = qc
+
 	// send new view to next leader
 	hs.SendNewView()
 
@@ -754,6 +829,11 @@ func (hs *BasicHotStuff) SendNewView() {
 func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveNewView: receive new view: %d", msg.GetView())
 
+	//if msg.GetView() < uint64(hs.CurrentView) {
+	//	log.Warnf("OnReceivePreCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
+	//	return
+	//}
+
 	qcPb := msg.GetQC()
 	if qcPb == nil {
 		log.Errorf("OnReceiveNewView: could not find QC")
@@ -766,6 +846,8 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	defer hs.mut.Unlock()
 
 	hs.highQCTmp = append(hs.highQCTmp, qc)
+
+	hs.ViewChanging = true
 
 	if len(hs.highQCTmp) < crypto.QuorumSize {
 		return
@@ -795,6 +877,7 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	cleanFunc(hs.verifiedCommitVotes)
 	log.Debug("OnReceiveNewView: clean all votes")
 
+	hs.ViewChanging = false
 	log.Infof("OnReceiveNewView: new view finished")
 }
 

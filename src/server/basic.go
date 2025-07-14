@@ -3,93 +3,25 @@ package server
 import (
 	"github.com/relab/gorums"
 	"hxy352/src/consensus"
-	"hxy352/src/crypto"
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/proto/basichotstuffpb"
-	"hxy352/src/types"
-	"sync"
 )
 
 type BasicHotStuffImpl struct {
-	crypto     crypto.Crypto
-	blockChain model.BlockChain
-
-	mut         sync.RWMutex // to protect the following
-	highQC      types.QuorumCert
-	currentView types.View
-
 	Consensus *consensus.BasicHotStuff
 }
 
 func NewBasicHotStuffImpl(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStuffImpl {
 	return &BasicHotStuffImpl{
-		//crypto: crypto.New(),
 		Consensus: consensus.NewBasicHotStuff(conf, gConf),
 	}
 }
 
-//func (s *BasicHotStuffImpl) Run(port int) {
-//	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-//	if err != nil {
-//		log.Panic(err)
-//	}
-//	gorumsSrv := gorums.NewServer()
-//	srv := NewBasicHotStuffImpl()
-//	basichotstuffpb.RegisterBasicHotStuffServer(gorumsSrv, srv)
-//	gorumsSrv.Serve(lis)
-//}
-
 func (s *BasicHotStuffImpl) NewView(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("NewView request: %+v", msg)
 
-	s.Consensus.OnReceiveNewView(msg)
-
-	//v := types.View(0)
-	//
-	//// todo: how to wait n - f new-view messages
-	//
-	//if service.MsgValidate.MatchingMsg(request, commonpb.MessageType_NewView, s.CurrentView()-1) == false {
-	//	log.Errorf("NewView message does not match: %+v", request)
-	//	return
-	//}
-	//
-	//var qc types.QuorumCert
-	//
-	//if request.GetQC() == nil {
-	//	log.Warnf("NewView message with nil QC: %+v", request)
-	//	return
-	//} else {
-	//	qc = basichotstuffpb.QuorumCertFromProto(request.QC)
-	//}
-	//
-	//if !s.crypto.VerifyQuorumCert(qc) {
-	//	log.Errorf("Quorum certificate verification failed, req: %+v", request)
-	//	return
-	//}
-	//
-	//// todo: 是否使用下面的update
-	//// 是否应该使用request.QC.View  > s.highQC.View()
-	//if qc.View() > s.highQC.View() {
-	//	s.highQC = qc
-	//}
-	//
-	//// create proposal
-	//model.NewBlock(s.highQC)
-
-	//s.UpdateHighQC(qc)
-
-	//if qc.View() >= v {
-	//	v = qc.View()
-	//}
-	//
-	//if v < s.CurrentView() {
-	//	return
-	//}
-	//
-	//newView := v + 1
-	//s.currentView = newView
-	//log.Infof("move to view %d", newView)
+	s.Consensus.MsgChan <- msg
 
 	return
 }
@@ -122,48 +54,57 @@ func (s *BasicHotStuffImpl) NewView(ctx gorums.ServerCtx, msg *basichotstuffpb.M
 func (s *BasicHotStuffImpl) Prepare(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("Prepare raw request: %+v", msg)
 
-	s.Consensus.OnReceivePrepare(msg)
+	s.Consensus.MsgChan <- msg
 
+	return
 }
 
 func (s *BasicHotStuffImpl) PrepareVote(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("PrepareVote raw request: %+v", msg)
 
-	s.Consensus.OnReceivePrepareVote(msg)
+	s.Consensus.MsgChan <- msg
 
+	return
 }
 
 func (s *BasicHotStuffImpl) PreCommit(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("PreCommit raw request: %+v", msg)
 
-	s.Consensus.OnReceivePreCommit(msg)
+	s.Consensus.MsgChan <- msg
 
+	return
 }
 
 func (s *BasicHotStuffImpl) PreCommitVote(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("PreCommitVote request: %+v", msg)
 
-	s.Consensus.OnReceivePreCommitVote(msg)
+	s.Consensus.MsgChan <- msg
+
+	return
 }
 
 func (s *BasicHotStuffImpl) Commit(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("Commit request: %+v", msg)
 
-	s.Consensus.OnReceiveCommit(msg)
+	s.Consensus.MsgChan <- msg
 
+	return
 }
 
 func (s *BasicHotStuffImpl) CommitVote(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("CommitVote request: %+v", msg)
 
-	s.Consensus.OnReceiveCommitVote(msg)
+	s.Consensus.MsgChan <- msg
 
+	return
 }
 
 func (s *BasicHotStuffImpl) Decide(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
 	log.Debugf("Decide request: %+v", msg)
 
-	s.Consensus.OnReceiveDecide(msg)
+	s.Consensus.MsgChan <- msg
+
+	return
 }
 
 func (s *BasicHotStuffImpl) SendRequest(ctx gorums.ServerCtx, req *basichotstuffpb.Request) {
@@ -188,6 +129,9 @@ func (s *BasicHotStuffImpl) SendRequest(ctx gorums.ServerCtx, req *basichotstuff
 	//}
 
 	//pbBlock := s.Consensus.SendPrepare(req)
-	s.Consensus.SendPrepare(req)
+
+	s.Consensus.MsgChan <- req
+
+	return
 
 }

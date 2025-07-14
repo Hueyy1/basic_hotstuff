@@ -63,6 +63,9 @@ func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
 	gorumsSrv := gorums.NewServer()
 	srv := server.NewBasicHotStuffImpl(&currentReplica, &gCfg)
 	basichotstuffpb.RegisterBasicHotStuffServer(gorumsSrv, srv)
+
+	go srv.Consensus.HandleMsg()
+
 	gorumsSrv.Serve(lis)
 
 	return nil
