@@ -36,8 +36,9 @@ type BasicHotStuff struct {
 
 	mut sync.RWMutex // to protect the following
 
-	ViewChanging   bool
-	ViewChangeCond *sync.Cond
+	ViewChanging       bool
+	ViewChangeCond     *sync.Cond
+	finishedViewChange map[types.View]bool // fix bug: after view change finished, receive another late req
 
 	CurrentBlock *model.Block
 	CurrentView  types.View
@@ -50,7 +51,7 @@ type BasicHotStuff struct {
 	verifiedPreCommitVotes map[types.Hash][]types.PartialCert
 	verifiedCommitVotes    map[types.Hash][]types.PartialCert
 
-	highQCTmp []types.QuorumCert
+	highQCTmp map[types.View][]types.QuorumCert
 
 	onceReplica sync.Once
 	onceClient  sync.Once
@@ -83,6 +84,10 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		verifiedPrepareVotes:   make(map[types.Hash][]types.PartialCert),
 		verifiedPreCommitVotes: make(map[types.Hash][]types.PartialCert),
 		verifiedCommitVotes:    make(map[types.Hash][]types.PartialCert),
+
+		highQCTmp: make(map[types.View][]types.QuorumCert),
+
+		finishedViewChange: make(map[types.View]bool),
 
 		onceReplica: sync.Once{},
 		onceClient:  sync.Once{},
@@ -893,6 +898,19 @@ func (hs *BasicHotStuff) SendNewView() {
 
 	l := hs.GetLeader()
 	if l == hs.Conf.Id {
+		// new view to myself
+
+		//hs.mut.Lock()
+
+		//hs.highQCTmp = append(hs.highQCTmp, hs.PrepareQC)
+		t := hs.highQCTmp[hs.CurrentView]
+		t = append(t, hs.PrepareQC)
+		hs.highQCTmp[hs.CurrentView] = t
+
+		hs.ViewChanging = true
+		log.Info("SendNewView: send new view to myself")
+
+		//hs.mut.Unlock()
 		return
 	}
 
@@ -911,14 +929,20 @@ func (hs *BasicHotStuff) SendNewView() {
 func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveNewView: receive new view: %d", msg.GetView())
 
-	// todo: bug, during new view cannot process req
-	// todo: bug, 3 or 2 new-views
 	// todo: bug a new view msg will be processed before decide msg.
 
 	//if msg.GetView() < uint64(hs.CurrentView) {
 	//	log.Warnf("OnReceivePreCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
 	//	return
 	//}
+
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
+
+	if hs.finishedViewChange[hs.CurrentView] == true {
+		log.Infof("OnReceiveNewView: already finished view change: %d", msg.GetView())
+		return
+	}
 
 	qcPb := msg.GetQC()
 	if qcPb == nil {
@@ -928,21 +952,20 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 
 	qc := basichotstuffpb.QuorumCertFromProto(qcPb)
 
-	hs.mut.Lock()
-	defer hs.mut.Unlock()
-
-	hs.highQCTmp = append(hs.highQCTmp, qc)
+	t := hs.highQCTmp[hs.CurrentView]
+	t = append(t, qc)
+	hs.highQCTmp[hs.CurrentView] = t
 
 	hs.ViewChanging = true
-	log.Infof("OnReceiveNewView: View Changing... get %d qc", len(hs.highQCTmp))
+	log.Infof("OnReceiveNewView: View Changing... get %d qc", len(hs.highQCTmp[hs.CurrentView]))
 
-	if len(hs.highQCTmp) < crypto.QuorumSize {
+	if len(hs.highQCTmp[hs.CurrentView]) < crypto.QuorumSize {
 		return
 	}
 
 	maxQC := hs.PrepareQC
 
-	for _, tmp := range hs.highQCTmp {
+	for _, tmp := range hs.highQCTmp[hs.CurrentView] {
 		if tmp.View() > maxQC.View() {
 			maxQC = tmp
 		}
@@ -951,7 +974,7 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	hs.HighQC = maxQC
 
 	// clean hs.highQCTmp
-	hs.highQCTmp = hs.highQCTmp[:0]
+	delete(hs.highQCTmp, hs.CurrentView)
 
 	// clean votes
 	cleanFunc := func(m map[types.Hash][]types.PartialCert) {
@@ -963,6 +986,8 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	cleanFunc(hs.verifiedPreCommitVotes)
 	cleanFunc(hs.verifiedCommitVotes)
 	log.Debug("OnReceiveNewView: clean all votes")
+
+	hs.finishedViewChange[hs.CurrentView] = true
 
 	hs.ViewChanging = false
 	hs.ViewChangeCond.Broadcast() // 唤醒等待请求
