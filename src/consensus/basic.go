@@ -291,7 +291,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 
 // OnReceivePrepare is called when a prepare message is received.
 func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceivePrepare: %.8s", msg.GetBlock().Hash)
+	log.Infof("OnReceivePrepare: view:%d", msg.GetView())
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_Prepare) {
 		log.Errorf("OnReceivePrepare: msg does not match")
@@ -314,12 +314,12 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 
 	// Ensure the block is proposed by the expected leader
 	if hs.GetLeader() != block.Proposer() {
-		log.Warnf("[BASIC HOTSTUFF PREPARE] block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
+		log.Warnf("OnReceivePrepare: block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
 		return
 	}
 
 	if !hs.SafeNode(block) {
-		log.Warn("[BASIC HOTSTUFF PREPARE] node is not safe")
+		log.Warn("OnReceivePrepare: node is not safe")
 		return
 	}
 
@@ -328,7 +328,7 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 	pc, err := hs.crypto.CreatePartialCert(block)
 
 	if err != nil {
-		log.Errorf("[BASIC HOTSTUFF PREPARE] failed to create partial certificate: %v", err)
+		log.Errorf("OnReceivePrepare: failed to create partial certificate: %v", err)
 		return
 	}
 
@@ -347,13 +347,13 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 
 	hs.GetLeaderNode().PrepareVote(context.Background(), prepareVote)
 
-	log.Infof("[BASIC HOTSTUFF PREPARE] sent prepare vote for block: %s", block.Hash())
+	log.Infof("OnReceivePrepare: sent prepare vote for block: %s", block.Hash())
 
 }
 
 // OnReceivePrepareVote is called when a prepare vote is received.
 func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceivePrepareVote: %.8s", msg.GetBlock().Hash)
+	log.Infof("OnReceivePrepareVote: view:%d", msg.GetView())
 
 	if msg.GetView() < uint64(hs.CurrentView) {
 		log.Warnf("OnReceivePrepareVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
@@ -448,7 +448,7 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 }
 
 func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceivePreCommit: %.8s", msg.GetBlock().Hash)
+	log.Infof("OnReceivePreCommit: view:%d", msg.GetView())
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_PreCommit) {
 		log.Errorf("OnReceivePreCommit: msg does not match")
@@ -514,7 +514,7 @@ func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 
 // OnReceivePreCommitVote is called when a pre-commit vote is received.
 func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceivePreCommitVote: %.8s", msg.GetBlock().Hash)
+	log.Infof("OnReceivePreCommitVote: view:%d", msg.GetView())
 
 	if msg.GetView() < uint64(hs.CurrentView) {
 		log.Warnf("OnReceivePreCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
@@ -609,7 +609,7 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 
 // OnReceiveCommit is called to commit a block.
 func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceiveCommit: %.8s", msg.GetBlock().Hash)
+	log.Infof("OnReceiveCommit: view:%d", msg.GetView())
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_Commit) {
 		log.Errorf("OnReceiveCommit: msg does not match")
@@ -676,7 +676,7 @@ func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 
 // OnReceiveCommitVote is called when a pre-commit vote is received.
 func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceiveCommitVote: %.8s", msg.GetBlock().Hash)
+	log.Infof("OnReceiveCommitVote: view:%d", msg.GetView())
 
 	// leader has already moved to next view
 	if msg.GetView() < uint64(hs.CurrentView) {
@@ -775,7 +775,7 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 
 // OnReceiveDecide is called to decide on a block.
 func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceiveDecide: %.8s", msg.GetBlock().Hash)
+	log.Infof("OnReceiveDecide: view:%d", msg.GetView())
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_Decide) {
 		log.Errorf("OnReceiveDecide: msg does not match")
@@ -829,6 +829,9 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 
 	// send new view to next leader
 	hs.SendNewView()
+
+	// send response
+	hs.SendResponse(string(block.Command()))
 
 }
 
@@ -924,13 +927,13 @@ func (hs *BasicHotStuff) SafeNode(block *model.Block) bool {
 		return true
 	}
 
-	log.Debug("[BASIC HOTSTUFF PREPARE] OnPropose: liveness condition failed")
+	log.Debug("liveness condition failed")
 
 	// safety
 	lockedBlock, ok := hs.BlockChain.Get(hs.LockedQC().BlockHash())
 
 	if !ok {
-		log.Error("[BASIC HOTSTUFF PREPARE] OnPropose: failed to get locked block")
+		log.Error("failed to get locked block")
 		return false
 	}
 
@@ -938,7 +941,7 @@ func (hs *BasicHotStuff) SafeNode(block *model.Block) bool {
 		return true
 	}
 
-	log.Debug("[BASIC HOTSTUFF PREPARE] OnPropose: safety condition failed")
+	log.Debug("safety condition failed")
 
 	return false
 }
