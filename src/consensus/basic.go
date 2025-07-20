@@ -21,10 +21,9 @@ import (
 )
 
 type BasicHotStuff struct {
-	Conf    *model.ReplicaConf
-	gConf   *model.Config
-	Timeout time.Duration
-	crypto  crypto.Crypto
+	Conf   *model.ReplicaConf
+	gConf  *model.Config
+	crypto crypto.Crypto
 
 	MsgChan chan any
 
@@ -32,6 +31,8 @@ type BasicHotStuff struct {
 	Client *clientpb.Node          // All nodes in the configuration
 
 	BlockChain model.BlockChain
+
+	timeout service.TimeoutService
 
 	mut sync.RWMutex // to protect the following
 
@@ -61,8 +62,9 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 	hs := &BasicHotStuff{
 		Conf:       conf,
 		gConf:      gConf,
-		Timeout:    1 * time.Second, // Default timeout duration
 		BlockChain: bc,
+
+		timeout: service.NewTimeoutService(1 * time.Second),
 
 		MsgChan: make(chan any),
 
@@ -142,6 +144,28 @@ func (hs *BasicHotStuff) HandleMsg() {
 
 				}
 			}
+		case <-hs.timeout.Timeout():
+			log.Warnf("Timeout received, go to new view !!!")
+
+			// todo: timeout * 2
+			// hs.timeout = service.NewTimeoutService()
+			hs.timeout.Reset()
+			hs.timeout.Stop()
+
+			// create empty block
+			hs.BlockChain.Store(hs.CreateLeaf(hs.CurrentBlock.Parent(), types.QuorumCert{}, ""))
+
+			hs.mut.Lock()
+
+			hs.CurrentView += 1
+
+			hs.CurrentBlock = nil
+
+			// send new view msg
+			hs.SendNewView()
+
+			hs.mut.Unlock()
+
 		}
 	}
 
@@ -351,11 +375,18 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 
 	log.Infof("OnReceivePrepare: sent prepare vote for block: %s", block.Hash())
 
+	hs.timeout.SoftStart()
+
 }
 
 // OnReceivePrepareVote is called when a prepare vote is received.
 func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceivePrepareVote: view:%d", msg.GetView())
+
+	//if string(msg.Block.GetCommand()) == "3" {
+	//	log.Warnf("try to timeout... 1s")
+	//	time.Sleep(2 * time.Second)
+	//}
 
 	if msg.GetView() < uint64(hs.CurrentView) {
 		log.Warnf("OnReceivePrepareVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
@@ -446,6 +477,8 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 		hs.VoteMyself(&preCommitPC, commonpb.MessageType_PreCommitVote)
 	}()
 
+	hs.timeout.SoftStart()
+
 }
 
 func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
@@ -506,6 +539,8 @@ func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 	hs.GetLeaderNode().PreCommitVote(context.Background(), preCommitVote)
 
 	log.Infof("OnReceivePreCommit sent prepare vote for block: %s", hs.CurrentBlock.Hash())
+
+	hs.timeout.SoftStart()
 
 	hs.mut.Lock()
 	defer hs.mut.Unlock()
@@ -604,6 +639,7 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 		hs.VoteMyself(&commitPC, commonpb.MessageType_CommitVote)
 	}()
 
+	hs.timeout.SoftStart()
 }
 
 // OnReceiveCommit is called to commit a block.
@@ -665,6 +701,8 @@ func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 	hs.GetLeaderNode().CommitVote(context.Background(), commitVote)
 
 	log.Infof("OnReceiveCommit sent commit vote for block: %s", hs.CurrentBlock.Hash())
+
+	hs.timeout.SoftStart()
 
 	hs.mut.Lock()
 	defer hs.mut.Unlock()
@@ -775,6 +813,8 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	// todo: if
 	// send response after new-view
 	hs.SendResponse(cmd)
+
+	hs.timeout.Stop()
 }
 
 // OnReceiveDecide is called to decide on a block.
@@ -843,6 +883,8 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 
 	// send response
 	hs.SendResponse(cmd)
+
+	hs.timeout.Stop()
 
 }
 
