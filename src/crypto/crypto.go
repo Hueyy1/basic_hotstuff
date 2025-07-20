@@ -29,9 +29,9 @@ type Crypto interface {
 	// CreateTimeoutCert creates a timeout certificate from a list of timeout messages.
 	CreateTimeoutCert(view types.View, timeouts []model.TimeoutMsg) (cert types.TimeoutCert, err error)
 	// VerifyPartialCert verifies a single partial certificate.
-	VerifyPartialCert(cert types.PartialCert) bool
+	VerifyPartialCert(block *model.Block, cert types.PartialCert) bool
 	// VerifyQuorumCert verifies a quorum certificate.
-	VerifyQuorumCert(qc types.QuorumCert) bool
+	VerifyQuorumCert(block *model.Block, qc types.QuorumCert) bool
 	// VerifyTimeoutCert verifies a timeout certificate.
 	VerifyTimeoutCert(tc types.TimeoutCert) bool
 }
@@ -39,7 +39,7 @@ type Crypto interface {
 var QuorumSize = 3
 
 type CryptoImpl struct {
-	Bc   model.BlockChain
+	//Bc   model.BlockChain
 	Conf *model.ReplicaConf
 
 	CryptoBase
@@ -96,16 +96,12 @@ func (c CryptoImpl) CreateTimeoutCert(view types.View, timeouts []model.TimeoutM
 }
 
 // VerifyPartialCert verifies a single partial certificate.
-func (c CryptoImpl) VerifyPartialCert(cert types.PartialCert) bool {
-	block, ok := c.Bc.Get(cert.BlockHash())
-	if !ok {
-		return false
-	}
+func (c CryptoImpl) VerifyPartialCert(block *model.Block, cert types.PartialCert) bool {
 	return c.Verify(cert.Signature(), block.ToBytes())
 }
 
 // VerifyQuorumCert verifies a quorum certificate.
-func (c CryptoImpl) VerifyQuorumCert(qc types.QuorumCert) bool {
+func (c CryptoImpl) VerifyQuorumCert(block *model.Block, qc types.QuorumCert) bool {
 	// genesis QC is always valid.
 	if qc.BlockHash() == model.GetGenesis().Hash() {
 		return true
@@ -122,10 +118,6 @@ func (c CryptoImpl) VerifyQuorumCert(qc types.QuorumCert) bool {
 	//	return false
 	//}
 	if participants.Len() < QuorumSize {
-		return false
-	}
-	block, ok := c.Bc.Get(qc.BlockHash())
-	if !ok {
 		return false
 	}
 	return c.Verify(qc.Signature(), block.ToBytes())

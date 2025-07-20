@@ -224,7 +224,7 @@ func (qc QuorumCert) String() string {
 	if qc.signature != nil {
 		_ = writeParticipants(&sb, qc.Signature().Participants())
 	}
-	return fmt.Sprintf("QC{ hash: %.6s, IDs: [ %s] }", qc.hash, &sb)
+	return fmt.Sprintf("QC{ hash: %.6s, IDs: [ %s], View: %d }", qc.hash, &sb, qc.view)
 }
 
 // SyncInfo holds the highest known QC or TC.
