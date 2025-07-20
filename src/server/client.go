@@ -23,7 +23,7 @@ type ClientImpl struct {
 	Consensus *consensus.BasicHotStuff
 	Chan      chan bool
 	conf      *model.Config
-	node      *basichotstuffpb.Node
+	nodes     []*basichotstuffpb.Node
 
 	mutex   sync.Mutex
 	resMap  map[string][]string
@@ -97,9 +97,12 @@ func (s *ClientImpl) initClient() {
 
 	addrs := []string{
 		fmt.Sprintf("%s:%d", s.conf.Replica[0].Host, s.conf.Replica[0].Port),
+		fmt.Sprintf("%s:%d", s.conf.Replica[1].Host, s.conf.Replica[1].Port),
+		fmt.Sprintf("%s:%d", s.conf.Replica[2].Host, s.conf.Replica[2].Port),
+		fmt.Sprintf("%s:%d", s.conf.Replica[3].Host, s.conf.Replica[3].Port),
 	}
 
-	var node *basichotstuffpb.Node
+	var nodes []*basichotstuffpb.Node
 	for {
 		allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(addrs))
 		if err != nil {
@@ -107,11 +110,11 @@ func (s *ClientImpl) initClient() {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		node = allNodesConfig.Nodes()[0]
+		nodes = allNodesConfig.Nodes()
 		break
 	}
 
-	s.node = node
+	s.nodes = nodes
 }
 
 func (s *ClientImpl) SendRequests() {
@@ -122,12 +125,13 @@ func (s *ClientImpl) SendRequests() {
 		req := &basichotstuffpb.Request{
 			Cmd: strconv.Itoa(i),
 		}
-		s.node.SendRequest(context.Background(), req)
-		log.Infof("Sending request to %v: %s", s.node.Address(), req.String())
+		s.nodes[i%4].SendRequest(context.Background(), req)
+		log.Infof("Sending request to %v: %s", s.nodes[i%4].Address(), req.String())
 
 		_ = <-s.Chan
 
-		time.Sleep(time.Second)
+		//time.Sleep(time.Second)
+		time.Sleep(time.Millisecond * 200)
 		i++
 	}
 }
