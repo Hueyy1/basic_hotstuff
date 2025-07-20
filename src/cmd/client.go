@@ -12,12 +12,15 @@ import (
 )
 
 func newBasicHotStuffClientCmd() *cobra.Command {
+	var replicaNumber int
 	cmd := &cobra.Command{
 		Use:         "bhs-client",
 		Long:        "basic hotstuff client",
 		RunE:        startBasicHotStuffClient,
 		Annotations: hsAnnotations,
 	}
+	cmd.Flags().IntVarP(&replicaNumber, "replica_number", "r", 4, "replica_number, start from 4 to 10")
+
 	return cmd
 }
 
@@ -28,6 +31,9 @@ func init() {
 func startBasicHotStuffClient(cmd *cobra.Command, _ []string) (err error) {
 	gCfg := LoadConfig()
 	log.Debugf("config is %+v", gCfg)
+
+	replicaNumber, _ := cmd.Flags().GetInt("replica_number")
+	gCfg.ReplicaNumber = replicaNumber
 
 	// start client server
 

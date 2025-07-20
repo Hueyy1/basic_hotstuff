@@ -64,6 +64,12 @@ type BasicHotStuff struct {
 func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStuff {
 	bc := service.NewBlockChain()
 
+	cry := crypto.CryptoImpl{
+		Conf:       conf,
+		CryptoBase: ecdsa.New(conf, gConf),
+	}
+	cry.SetN_And_F(gConf.ReplicaNumber)
+
 	hs := &BasicHotStuff{
 		Conf:       conf,
 		gConf:      gConf,
@@ -74,10 +80,7 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		MsgChan:         make(chan any),
 		PendingMessages: make(map[types.View][]*basichotstuffpb.Msg),
 
-		crypto: crypto.CryptoImpl{
-			Conf:       conf,
-			CryptoBase: ecdsa.New(conf, gConf),
-		},
+		crypto: cry,
 
 		CurrentView: 1, // Initial view number
 		//PrepareQC:   types.NewQuorumCert(nil, 0, model.GetGenesis().Hash()),
@@ -207,7 +210,7 @@ func (hs *BasicHotStuff) InitAllReplicaClients() {
 	)
 
 	var adds []string
-	for _, config := range hs.gConf.Replica {
+	for _, config := range hs.gConf.Replica[0:hs.gConf.ReplicaNumber] {
 		if types.ID(config.Id) == hs.Conf.Id {
 			// Skip myself
 			continue

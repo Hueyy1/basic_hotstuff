@@ -10,14 +10,15 @@ import (
 	"hxy352/src/server"
 	"hxy352/src/types"
 	"net"
-	"net/http"
-	_ "net/http/pprof"
+	//_ "net/http/pprof"
 )
 
 var hsAnnotations = map[string]string{"app": "hotstuff", "isGraceful": "true"}
 
 func newBasicHotStuffServiceCmd() *cobra.Command {
 	var id int
+	var replicaNumber int
+
 	cmd := &cobra.Command{
 		Use:         "bhs",
 		Long:        "basic hotstuff",
@@ -25,6 +26,7 @@ func newBasicHotStuffServiceCmd() *cobra.Command {
 		Annotations: hsAnnotations,
 	}
 	cmd.Flags().IntVarP(&id, "id", "i", 0, "id of the replica, start from 0")
+	cmd.Flags().IntVarP(&replicaNumber, "replica_number", "r", 4, "replica_number, start from 4 to 10")
 	return cmd
 }
 
@@ -35,15 +37,17 @@ func init() {
 func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
 	gCfg := LoadConfig()
 	log.Debugf("config is %+v", gCfg)
-
 	id, _ := cmd.Flags().GetInt("id")
 	gCfg.Id = types.ID(id)
 
-	if id == 0 {
-		go func() {
-			http.ListenAndServe("localhost:6060", nil)
-		}()
-	}
+	replicaNumber, _ := cmd.Flags().GetInt("replica_number")
+	gCfg.ReplicaNumber = replicaNumber
+
+	//if id == 0 {
+	//	go func() {
+	//		http.ListenAndServe("localhost:6060", nil)
+	//	}()
+	//}
 
 	err = keygen.LoadPemFile(&gCfg)
 	if err != nil {

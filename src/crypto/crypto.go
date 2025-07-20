@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"fmt"
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/types"
@@ -36,13 +37,28 @@ type Crypto interface {
 	VerifyTimeoutCert(tc types.TimeoutCert) bool
 }
 
+func hotstuffQuorum(n int) (maxFaulty int, minCorrect int, err error) {
+	if n < 4 {
+		return 0, 0, fmt.Errorf("n must be >= 4")
+	}
+	maxFaulty = (n - 1) / 3
+	minCorrect = n - maxFaulty
+	return maxFaulty, minCorrect, nil
+}
+
 var QuorumSize = 3
+var FaultSize = 1
 
 type CryptoImpl struct {
 	//Bc   model.BlockChain
-	Conf *model.ReplicaConf
+	gConf *model.Config
+	Conf  *model.ReplicaConf
 
 	CryptoBase
+}
+
+func (c *CryptoImpl) SetN_And_F(n int) {
+	FaultSize, QuorumSize, _ = hotstuffQuorum(n)
 }
 
 // New returns a new implementation of the Crypto interface. It will use the given CryptoBase to create and verify

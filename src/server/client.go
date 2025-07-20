@@ -7,17 +7,17 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"hxy352/src/consensus"
+	"hxy352/src/crypto"
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/proto/basichotstuffpb"
 	"hxy352/src/proto/clientpb"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"time"
 )
-
-const SuccessCount = 2
 
 type ClientImpl struct {
 	Consensus *consensus.BasicHotStuff
@@ -59,7 +59,7 @@ func (s *ClientImpl) SendResponse(ctx gorums.ServerCtx, res *clientpb.Response) 
 	} else {
 		v = append(v, res.GetResult())
 
-		if len(v) < SuccessCount {
+		if len(v) < crypto.FaultSize+1 {
 			// continue waiting response from replicas
 			s.resMap[res.Cmd] = v
 		} else {
@@ -95,11 +95,10 @@ func (s *ClientImpl) initClient() {
 	)
 	// Get all all available node ids, 3 nodes
 
-	addrs := []string{
-		fmt.Sprintf("%s:%d", s.conf.Replica[0].Host, s.conf.Replica[0].Port),
-		fmt.Sprintf("%s:%d", s.conf.Replica[1].Host, s.conf.Replica[1].Port),
-		fmt.Sprintf("%s:%d", s.conf.Replica[2].Host, s.conf.Replica[2].Port),
-		fmt.Sprintf("%s:%d", s.conf.Replica[3].Host, s.conf.Replica[3].Port),
+	var addrs []string
+
+	for _, rep := range s.conf.Replica[0:s.conf.ReplicaNumber] {
+		addrs = append(addrs, fmt.Sprintf("%s:%d", rep.Host, rep.Port))
 	}
 
 	var nodes []*basichotstuffpb.Node
@@ -125,13 +124,19 @@ func (s *ClientImpl) SendRequests() {
 		req := &basichotstuffpb.Request{
 			Cmd: strconv.Itoa(i),
 		}
-		s.nodes[i%4].SendRequest(context.Background(), req)
-		log.Infof("Sending request to %v: %s", s.nodes[i%4].Address(), req.String())
+		s.nodes[i%s.conf.ReplicaNumber].SendRequest(context.Background(), req)
+		log.Infof("Sending request to %v: %s", s.nodes[i%s.conf.ReplicaNumber].Address(), req.String())
 
 		_ = <-s.Chan
 
+		if i == 1000 {
+			// exit
+			os.Exit(0)
+			return
+		}
+
 		//time.Sleep(time.Second)
-		time.Sleep(time.Millisecond * 200)
+		//time.Sleep(time.Millisecond * 5)
 		i++
 	}
 }
