@@ -37,6 +37,7 @@ type Crypto interface {
 	VerifyTimeoutCert(tc types.TimeoutCert) bool
 }
 
+// todo: quick show
 func hotstuffQuorum(n int) (maxFaulty int, minCorrect int, err error) {
 	if n < 4 {
 		return 0, 0, fmt.Errorf("n must be >= 4")

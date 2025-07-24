@@ -70,6 +70,8 @@ func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
 
 	go srv.Consensus.HandleMsg()
 
+	go srv.Consensus.HandleReq()
+
 	gorumsSrv.Serve(lis)
 
 	return nil

@@ -49,7 +49,8 @@ func (m *MetricService) Handle() {
 				v.CommitTime = info.CommitTime
 
 				// write to csv
-				m.WriteToCSV(v)
+				// todo: temp comment
+				// m.WriteToCSV(v)
 
 				delete(m.tmpMap, info.Hash)
 

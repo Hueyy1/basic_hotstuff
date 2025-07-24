@@ -13,7 +13,6 @@ import (
 	"hxy352/src/proto/basichotstuffpb"
 	"hxy352/src/proto/clientpb"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -129,14 +128,16 @@ func (s *ClientImpl) SendRequests() {
 
 		_ = <-s.Chan
 
-		if i == 1000 {
-			// exit
-			os.Exit(0)
-			return
-		}
+		//os.Exit(0)
 
-		//time.Sleep(time.Second)
-		//time.Sleep(time.Millisecond * 5)
+		//if i == 1000 {
+		//	// exit
+		//	os.Exit(0)
+		//	return
+		//}
+
+		// time.Sleep(time.Second)
+		// time.Sleep(time.Millisecond * 5)
 		i++
 	}
 }
