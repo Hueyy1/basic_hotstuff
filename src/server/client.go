@@ -19,10 +19,11 @@ import (
 )
 
 type ClientImpl struct {
-	Consensus *consensus.BasicHotStuff
-	Chan      chan bool
-	conf      *model.Config
-	nodes     []*basichotstuffpb.Node
+	Consensus      *consensus.BasicHotStuff
+	Chan           chan bool
+	conf           *model.Config
+	nodes          []*basichotstuffpb.Node
+	allNodesConfig *basichotstuffpb.Configuration
 
 	mutex   sync.Mutex
 	resMap  map[string][]string
@@ -108,6 +109,7 @@ func (s *ClientImpl) initClient() {
 			time.Sleep(2 * time.Second)
 			continue
 		}
+		s.allNodesConfig = allNodesConfig
 		nodes = allNodesConfig.Nodes()
 		break
 	}
@@ -123,7 +125,8 @@ func (s *ClientImpl) SendRequests() {
 		req := &basichotstuffpb.Request{
 			Cmd: strconv.Itoa(i),
 		}
-		s.nodes[i%s.conf.ReplicaNumber].SendRequest(context.Background(), req)
+
+		s.allNodesConfig.SendRequest(context.Background(), req)
 		log.Infof("Sending request to %v: %s", s.nodes[i%s.conf.ReplicaNumber].Address(), req.String())
 
 		_ = <-s.Chan

@@ -149,6 +149,14 @@ type Node struct {
 	*gorums.RawNode
 }
 
+// BasicHotStuffClient is the client interface for the BasicHotStuff service.
+type BasicHotStuffClient interface {
+	SendRequest(ctx context.Context, in *Request, opts ...gorums.CallOption)
+}
+
+// enforce interface compliance
+var _ BasicHotStuffClient = (*Configuration)(nil)
+
 // BasicHotStuffNodeClient is the single node client interface for the BasicHotStuff service.
 type BasicHotStuffNodeClient interface {
 	NewView(ctx context.Context, in *Msg, opts ...gorums.CallOption)
@@ -159,11 +167,24 @@ type BasicHotStuffNodeClient interface {
 	Commit(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	CommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	Decide(ctx context.Context, in *Msg, opts ...gorums.CallOption)
-	SendRequest(ctx context.Context, in *Request, opts ...gorums.CallOption)
 }
 
 // enforce interface compliance
 var _ BasicHotStuffNodeClient = (*Node)(nil)
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// SendRequest is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (c *Configuration) SendRequest(ctx context.Context, in *Request, opts ...gorums.CallOption) {
+	cd := gorums.QuorumCallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.SendRequest",
+	}
+
+	c.RawConfiguration.Multicast(ctx, cd, opts...)
+}
 
 // There are no quorum calls.
 type QuorumSpec interface{}
@@ -336,20 +357,6 @@ func (n *Node) Decide(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
 	cd := gorums.CallData{
 		Message: in,
 		Method:  "basichotstuffpb.BasicHotStuff.Decide",
-	}
-
-	n.RawNode.Unicast(ctx, cd, opts...)
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ emptypb.Empty
-
-// SendRequest is a quorum call invoked on all nodes in configuration c,
-// with the same argument in, and returns a combined result.
-func (n *Node) SendRequest(ctx context.Context, in *Request, opts ...gorums.CallOption) {
-	cd := gorums.CallData{
-		Message: in,
-		Method:  "basichotstuffpb.BasicHotStuff.SendRequest",
 	}
 
 	n.RawNode.Unicast(ctx, cd, opts...)

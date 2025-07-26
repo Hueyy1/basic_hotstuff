@@ -43,7 +43,7 @@ service BasicHotStuff {
   }
 
   rpc SendRequest(Request) returns (google.protobuf.Empty) {
-    option (gorums.unicast) = true;
+    option (gorums.multicast) = true;
   }
 
 }
@@ -59,6 +59,7 @@ message Msg {
   Block Block = 3;
   PartialCert PartialCert = 4;
   QuorumCert QC = 5;
+  uint32 ReplicaId = 6;
 }
 
 message BlockHash {

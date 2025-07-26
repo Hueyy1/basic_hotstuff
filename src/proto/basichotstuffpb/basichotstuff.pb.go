@@ -84,6 +84,7 @@ type Msg struct {
 	Block         *Block                 `protobuf:"bytes,3,opt,name=Block,proto3" json:"Block,omitempty"`
 	PartialCert   *PartialCert           `protobuf:"bytes,4,opt,name=PartialCert,proto3" json:"PartialCert,omitempty"`
 	QC            *QuorumCert            `protobuf:"bytes,5,opt,name=QC,proto3" json:"QC,omitempty"`
+	ReplicaId     uint32                 `protobuf:"varint,6,opt,name=ReplicaId,proto3" json:"ReplicaId,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -151,6 +152,13 @@ func (x *Msg) GetQC() *QuorumCert {
 		return x.QC
 	}
 	return nil
+}
+
+func (x *Msg) GetReplicaId() uint32 {
+	if x != nil {
+		return x.ReplicaId
+	}
+	return 0
 }
 
 type BlockHash struct {
@@ -696,13 +704,14 @@ const file_proto_basichotstuffpb_basichotstuff_proto_rawDesc = "" +
 	")proto/basichotstuffpb/basichotstuff.proto\x12\x0fbasichotstuffpb\x1a\fgorums.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bproto/commonpb/common.proto\"A\n" +
 	"\aRequest\x12\x10\n" +
 	"\x03cmd\x18\x01 \x01(\tR\x03cmd\x12$\n" +
-	"\rclientAddress\x18\x02 \x01(\tR\rclientAddress\"\xdf\x01\n" +
+	"\rclientAddress\x18\x02 \x01(\tR\rclientAddress\"\xfd\x01\n" +
 	"\x03Msg\x12)\n" +
 	"\x04Type\x18\x01 \x01(\x0e2\x15.commonpb.MessageTypeR\x04Type\x12\x12\n" +
 	"\x04View\x18\x02 \x01(\x04R\x04View\x12,\n" +
 	"\x05Block\x18\x03 \x01(\v2\x16.basichotstuffpb.BlockR\x05Block\x12>\n" +
 	"\vPartialCert\x18\x04 \x01(\v2\x1c.basichotstuffpb.PartialCertR\vPartialCert\x12+\n" +
-	"\x02QC\x18\x05 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC\"\x1f\n" +
+	"\x02QC\x18\x05 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC\x12\x1c\n" +
+	"\tReplicaId\x18\x06 \x01(\rR\tReplicaId\"\x1f\n" +
 	"\tBlockHash\x12\x12\n" +
 	"\x04Hash\x18\x01 \x01(\fR\x04Hash\"\xe4\x01\n" +
 	"\x05Block\x12\x16\n" +
@@ -746,7 +755,7 @@ const file_proto_basichotstuffpb_basichotstuff_proto_rawDesc = "" +
 	"\n" +
 	"CommitVote\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12<\n" +
 	"\x06Decide\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12E\n" +
-	"\vSendRequest\x12\x18.basichotstuffpb.Request\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01B\"Z hxy352/src/proto/basichotstuffpbb\x06proto3"
+	"\vSendRequest\x12\x18.basichotstuffpb.Request\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01B\"Z hxy352/src/proto/basichotstuffpbb\x06proto3"
 
 var (
 	file_proto_basichotstuffpb_basichotstuff_proto_rawDescOnce sync.Once

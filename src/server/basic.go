@@ -115,10 +115,6 @@ func (s *BasicHotStuffImpl) SendRequest(ctx gorums.ServerCtx, req *basichotstuff
 		return
 	}
 
-	//s.Consensus.MsgChan <- req
-
-	//s.Consensus.CmdQueue.Enqueue(req)
-
 	s.Consensus.CmdCache.Enqueue(req)
 
 	return

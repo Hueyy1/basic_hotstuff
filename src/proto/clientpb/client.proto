@@ -18,4 +18,5 @@ service Client {
 message Response {
   string result = 1;
   string cmd = 2;
+  uint32 ReplicaId = 3;
 }

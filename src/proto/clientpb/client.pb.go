@@ -27,6 +27,7 @@ type Response struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Result        string                 `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	Cmd           string                 `protobuf:"bytes,2,opt,name=cmd,proto3" json:"cmd,omitempty"`
+	ReplicaId     uint32                 `protobuf:"varint,3,opt,name=ReplicaId,proto3" json:"ReplicaId,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -75,14 +76,22 @@ func (x *Response) GetCmd() string {
 	return ""
 }
 
+func (x *Response) GetReplicaId() uint32 {
+	if x != nil {
+		return x.ReplicaId
+	}
+	return 0
+}
+
 var File_proto_clientpb_client_proto protoreflect.FileDescriptor
 
 const file_proto_clientpb_client_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproto/clientpb/client.proto\x12\bclientpb\x1a\fgorums.proto\x1a\x1bgoogle/protobuf/empty.proto\"4\n" +
+	"\x1bproto/clientpb/client.proto\x12\bclientpb\x1a\fgorums.proto\x1a\x1bgoogle/protobuf/empty.proto\"R\n" +
 	"\bResponse\x12\x16\n" +
 	"\x06result\x18\x01 \x01(\tR\x06result\x12\x10\n" +
-	"\x03cmd\x18\x02 \x01(\tR\x03cmd2J\n" +
+	"\x03cmd\x18\x02 \x01(\tR\x03cmd\x12\x1c\n" +
+	"\tReplicaId\x18\x03 \x01(\rR\tReplicaId2J\n" +
 	"\x06Client\x12@\n" +
 	"\fSendResponse\x12\x12.clientpb.Response\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01B\x1bZ\x19hxy352/src/proto/clientpbb\x06proto3"
 

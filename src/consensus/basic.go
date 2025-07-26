@@ -27,14 +27,11 @@ type BasicHotStuff struct {
 
 	CmdCache *service.CmdCache
 
-	cmdCount map[string]int
-	Ready    chan struct{} // current
+	Ready chan struct{} // current
 
 	MsgChan chan *basichotstuffpb.Msg
 	//PendingMessages map[types.View][]*basichotstuffpb.Msg
 	MsgQueue *service.MessageQueueService
-
-	CmdQueue *service.Queue[*basichotstuffpb.Request]
 
 	Nodes  []*basichotstuffpb.Node // All nodes in the configuration
 	Client *clientpb.Node          // All nodes in the configuration
@@ -84,7 +81,6 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		BlockChain: bc,
 
 		CmdCache: service.NewCmdCache(),
-		cmdCount: make(map[string]int),
 		Ready:    make(chan struct{}),
 
 		timeout: service.NewTimeoutService(5 * time.Second),
@@ -92,7 +88,6 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		MsgChan: make(chan *basichotstuffpb.Msg, 1000),
 		//PendingMessages: make(map[types.View][]*basichotstuffpb.Msg),
 		MsgQueue: service.NewMessageQueueService(),
-		CmdQueue: service.NewQueue[*basichotstuffpb.Request](),
 
 		crypto: cry,
 
@@ -229,13 +224,18 @@ func (hs *BasicHotStuff) HandleReq() {
 	for {
 		select {
 		case <-hs.Ready:
-			if req, ok := hs.CmdCache.Dequeue(); ok {
+
+			for {
+				req, ok := hs.CmdCache.Dequeue()
+				log.Infof("hs.CmdCache.Dequeue(): %+v", req)
+				if !ok {
+					continue
+				}
 				if hs.CmdCache.IsFinished(req.GetCmd()) {
 					continue
 				}
 				hs.SendPrepare(req)
-			} else {
-				continue
+				break
 			}
 
 		}
@@ -388,9 +388,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 	// check if leader, otherwise send to leader
 	l := hs.GetLeader()
 	if l != hs.Conf.Id {
-		log.Warnf("current replica is not leader, current leader is %d, resend... current view: %d", l, hs.CurrentView)
-		// send to leader
-		hs.Unicast(cmd)
+		log.Warnf("current replica is not leader, current leader is %d, wait... current view: %d", l, hs.CurrentView)
 		return
 	}
 
@@ -403,7 +401,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 	//// 此时 view 已经稳定
 	//hs.mut.Unlock()
 
-	log.Infof("try create leaf, %s", hs.HighQC)
+	log.Debugf("try create leaf, %s", hs.HighQC)
 	block := hs.CreateLeaf(hs.HighQC.BlockHash(), hs.HighQC, types.Command(cmd.GetCmd()))
 
 	hs.CurrentBlock = block
@@ -416,6 +414,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 		Block:       pbBlock,
 		PartialCert: nil,
 		QC:          basichotstuffpb.QuorumCertToProto(hs.HighQC),
+		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
 	for _, node := range hs.GetNodes() {
@@ -511,6 +510,7 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 		Block:       pbBlock,
 		PartialCert: pCert,
 		QC:          nil,
+		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
 	log.Debugf("leader node: %v", hs.GetLeaderNode())
@@ -599,6 +599,7 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 			Block:       msg.GetBlock(),
 			PartialCert: nil,
 			QC:          basichotstuffpb.QuorumCertToProto(qc),
+			ReplicaId:   uint32(hs.Conf.Id),
 		})
 	}
 
@@ -673,6 +674,7 @@ func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 		Block:       msg.GetBlock(),
 		PartialCert: pCert,
 		QC:          nil,
+		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
 	//log.Debugf("leader node: %v", hs.GetLeaderNode())
@@ -766,6 +768,7 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 		Block:       msg.GetBlock(),
 		PartialCert: nil,
 		QC:          basichotstuffpb.QuorumCertToProto(qc),
+		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
 	for _, node := range hs.GetNodes() {
@@ -838,6 +841,7 @@ func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 		Block:       msg.GetBlock(),
 		PartialCert: pCert,
 		QC:          nil,
+		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
 	//log.Debugf("leader node: %v", hs.GetLeaderNode())
@@ -941,6 +945,7 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 		Block:       msg.GetBlock(),
 		PartialCert: nil,
 		QC:          basichotstuffpb.QuorumCertToProto(qc),
+		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
 	for _, node := range hs.GetNodes() {
@@ -1268,20 +1273,6 @@ func (hs *BasicHotStuff) GetLeaderAddress() string {
 	return fmt.Sprintf("%s:%d", hs.gConf.Replica[leaderIdx].Host, hs.gConf.Replica[leaderIdx].Port)
 }
 
-func (hs *BasicHotStuff) Unicast(req *basichotstuffpb.Request) {
-	address := hs.GetLeaderAddress()
-	a1, _ := normalizeAddr(address)
-
-	for _, node := range hs.GetNodes() {
-		a2, _ := normalizeAddr(node.Address())
-		if a1 == a2 {
-			node.SendRequest(context.Background(), req)
-			return
-		}
-	}
-	return
-}
-
 // GetLeaderNode get leader node
 func (hs *BasicHotStuff) GetLeaderNode() *basichotstuffpb.Node {
 	leaderAddress := hs.GetLeaderAddress()
@@ -1340,8 +1331,9 @@ func (hs *BasicHotStuff) VoteMyself(pc *types.PartialCert, voteType commonpb.Mes
 func (hs *BasicHotStuff) SendResponse(cmd string) {
 
 	res := &clientpb.Response{
-		Result: "OK",
-		Cmd:    cmd,
+		Result:    "OK",
+		Cmd:       cmd,
+		ReplicaId: uint32(hs.Conf.Id),
 	}
 
 	log.Infof("try get client: %v", hs.GetClient())
