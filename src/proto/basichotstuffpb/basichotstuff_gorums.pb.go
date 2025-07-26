@@ -151,6 +151,10 @@ type Node struct {
 
 // BasicHotStuffClient is the client interface for the BasicHotStuff service.
 type BasicHotStuffClient interface {
+	Prepare(ctx context.Context, in *Msg, opts ...gorums.CallOption)
+	PreCommit(ctx context.Context, in *Msg, opts ...gorums.CallOption)
+	Commit(ctx context.Context, in *Msg, opts ...gorums.CallOption)
+	Decide(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	SendRequest(ctx context.Context, in *Request, opts ...gorums.CallOption)
 }
 
@@ -160,17 +164,69 @@ var _ BasicHotStuffClient = (*Configuration)(nil)
 // BasicHotStuffNodeClient is the single node client interface for the BasicHotStuff service.
 type BasicHotStuffNodeClient interface {
 	NewView(ctx context.Context, in *Msg, opts ...gorums.CallOption)
-	Prepare(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	PrepareVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
-	PreCommit(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	PreCommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
-	Commit(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	CommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
-	Decide(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 }
 
 // enforce interface compliance
 var _ BasicHotStuffNodeClient = (*Node)(nil)
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// Prepare is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (c *Configuration) Prepare(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.QuorumCallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.Prepare",
+	}
+
+	c.RawConfiguration.Multicast(ctx, cd, opts...)
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// PreCommit is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (c *Configuration) PreCommit(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.QuorumCallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.PreCommit",
+	}
+
+	c.RawConfiguration.Multicast(ctx, cd, opts...)
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// Commit is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (c *Configuration) Commit(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.QuorumCallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.Commit",
+	}
+
+	c.RawConfiguration.Multicast(ctx, cd, opts...)
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// Decide is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (c *Configuration) Decide(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.QuorumCallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.Decide",
+	}
+
+	c.RawConfiguration.Multicast(ctx, cd, opts...)
+}
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ emptypb.Empty
@@ -267,40 +323,12 @@ func (n *Node) NewView(ctx context.Context, in *Msg, opts ...gorums.CallOption) 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ emptypb.Empty
 
-// Prepare is a quorum call invoked on all nodes in configuration c,
-// with the same argument in, and returns a combined result.
-func (n *Node) Prepare(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
-	cd := gorums.CallData{
-		Message: in,
-		Method:  "basichotstuffpb.BasicHotStuff.Prepare",
-	}
-
-	n.RawNode.Unicast(ctx, cd, opts...)
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ emptypb.Empty
-
 // PrepareVote is a quorum call invoked on all nodes in configuration c,
 // with the same argument in, and returns a combined result.
 func (n *Node) PrepareVote(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
 	cd := gorums.CallData{
 		Message: in,
 		Method:  "basichotstuffpb.BasicHotStuff.PrepareVote",
-	}
-
-	n.RawNode.Unicast(ctx, cd, opts...)
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ emptypb.Empty
-
-// PreCommit is a quorum call invoked on all nodes in configuration c,
-// with the same argument in, and returns a combined result.
-func (n *Node) PreCommit(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
-	cd := gorums.CallData{
-		Message: in,
-		Method:  "basichotstuffpb.BasicHotStuff.PreCommit",
 	}
 
 	n.RawNode.Unicast(ctx, cd, opts...)
@@ -323,40 +351,12 @@ func (n *Node) PreCommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOp
 // Reference imports to suppress errors if they are not otherwise used.
 var _ emptypb.Empty
 
-// Commit is a quorum call invoked on all nodes in configuration c,
-// with the same argument in, and returns a combined result.
-func (n *Node) Commit(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
-	cd := gorums.CallData{
-		Message: in,
-		Method:  "basichotstuffpb.BasicHotStuff.Commit",
-	}
-
-	n.RawNode.Unicast(ctx, cd, opts...)
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ emptypb.Empty
-
 // CommitVote is a quorum call invoked on all nodes in configuration c,
 // with the same argument in, and returns a combined result.
 func (n *Node) CommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
 	cd := gorums.CallData{
 		Message: in,
 		Method:  "basichotstuffpb.BasicHotStuff.CommitVote",
-	}
-
-	n.RawNode.Unicast(ctx, cd, opts...)
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ emptypb.Empty
-
-// Decide is a quorum call invoked on all nodes in configuration c,
-// with the same argument in, and returns a combined result.
-func (n *Node) Decide(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
-	cd := gorums.CallData{
-		Message: in,
-		Method:  "basichotstuffpb.BasicHotStuff.Decide",
 	}
 
 	n.RawNode.Unicast(ctx, cd, opts...)

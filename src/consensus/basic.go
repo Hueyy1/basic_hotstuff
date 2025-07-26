@@ -32,8 +32,9 @@ type BasicHotStuff struct {
 	MsgChan  chan *basichotstuffpb.Msg
 	MsgQueue *service.MessageQueueService
 
-	Nodes  []*basichotstuffpb.Node // All nodes in the configuration
-	Client *clientpb.Node          // All nodes in the configuration
+	Nodes    []*basichotstuffpb.Node // All nodes in the configuration
+	NodesCfg *basichotstuffpb.Configuration
+	Client   *clientpb.Node
 
 	BlockChain model.BlockChain
 
@@ -330,6 +331,7 @@ func (hs *BasicHotStuff) InitAllReplicaClients() {
 
 	hs.Nodes = make([]*basichotstuffpb.Node, len(adds))
 	hs.Nodes = allNodesConfig.Nodes()
+	hs.NodesCfg = allNodesConfig
 
 	log.Infof("InitAllReplicaClients finished")
 }
@@ -337,6 +339,11 @@ func (hs *BasicHotStuff) InitAllReplicaClients() {
 func (hs *BasicHotStuff) GetNodes() []*basichotstuffpb.Node {
 	hs.onceReplica.Do(hs.InitAllReplicaClients)
 	return hs.Nodes
+}
+
+func (hs *BasicHotStuff) GetNodesCfg() *basichotstuffpb.Configuration {
+	hs.onceReplica.Do(hs.InitAllReplicaClients)
+	return hs.NodesCfg
 }
 
 func (hs *BasicHotStuff) InitClient() {
@@ -417,9 +424,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
-	for _, node := range hs.GetNodes() {
-		node.Prepare(context.Background(), prepareMsg)
-	}
+	hs.GetNodesCfg().Prepare(context.Background(), prepareMsg)
 
 	log.Infof("SendPrepare: send prepare msg: %+v", prepareMsg)
 
@@ -592,16 +597,14 @@ func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 
 	// send pre-commit
 
-	for _, node := range hs.GetNodes() {
-		node.PreCommit(context.Background(), &basichotstuffpb.Msg{
-			Type:        commonpb.MessageType_PreCommit,
-			View:        uint64(hs.CurrentView),
-			Block:       msg.GetBlock(),
-			PartialCert: nil,
-			QC:          basichotstuffpb.QuorumCertToProto(qc),
-			ReplicaId:   uint32(hs.Conf.Id),
-		})
-	}
+	hs.NodesCfg.PreCommit(context.Background(), &basichotstuffpb.Msg{
+		Type:        commonpb.MessageType_PreCommit,
+		View:        uint64(hs.CurrentView),
+		Block:       msg.GetBlock(),
+		PartialCert: nil,
+		QC:          basichotstuffpb.QuorumCertToProto(qc),
+		ReplicaId:   uint32(hs.Conf.Id),
+	})
 
 	// vote myself
 
@@ -771,9 +774,7 @@ func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
-	for _, node := range hs.GetNodes() {
-		node.Commit(context.Background(), commitMsg)
-	}
+	hs.GetNodesCfg().Commit(context.Background(), commitMsg)
 
 	// vote myself
 
@@ -948,9 +949,7 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
-	for _, node := range hs.GetNodes() {
-		node.Decide(context.Background(), decideMsg)
-	}
+	hs.GetNodesCfg().Decide(context.Background(), decideMsg)
 
 	// exec cmd
 	log.Infof("OnReceiveCommitVote: exec cmd: %s %s", msg.GetBlock().Hash, block.Command())

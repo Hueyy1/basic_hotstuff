@@ -747,14 +747,14 @@ const file_proto_basichotstuffpb_basichotstuff_proto_rawDesc = "" +
 	"\x02QC\x18\x01 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC2\xdb\x04\n" +
 	"\rBasicHotStuff\x12=\n" +
 	"\aNewView\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12=\n" +
-	"\aPrepare\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12A\n" +
+	"\aPrepare\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12A\n" +
 	"\vPrepareVote\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12?\n" +
-	"\tPreCommit\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12C\n" +
+	"\tPreCommit\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12C\n" +
 	"\rPreCommitVote\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12<\n" +
-	"\x06Commit\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12@\n" +
+	"\x06Commit\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12@\n" +
 	"\n" +
 	"CommitVote\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12<\n" +
-	"\x06Decide\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12E\n" +
+	"\x06Decide\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12E\n" +
 	"\vSendRequest\x12\x18.basichotstuffpb.Request\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01B\"Z hxy352/src/proto/basichotstuffpbb\x06proto3"
 
 var (

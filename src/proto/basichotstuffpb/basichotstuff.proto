@@ -15,7 +15,7 @@ service BasicHotStuff {
   }
 
   rpc Prepare(Msg) returns (google.protobuf.Empty) {
-    option (gorums.unicast) = true;
+    option (gorums.multicast) = true;
   }
 
   rpc PrepareVote(Msg) returns (google.protobuf.Empty) {
@@ -23,7 +23,7 @@ service BasicHotStuff {
   }
 
   rpc PreCommit(Msg) returns (google.protobuf.Empty) {
-    option (gorums.unicast) = true;
+    option (gorums.multicast) = true;
   }
 
   rpc PreCommitVote(Msg) returns (google.protobuf.Empty) {
@@ -31,7 +31,7 @@ service BasicHotStuff {
   }
 
   rpc Commit(Msg) returns (google.protobuf.Empty) {
-    option (gorums.unicast) = true;
+    option (gorums.multicast) = true;
   }
 
   rpc CommitVote(Msg) returns (google.protobuf.Empty) {
@@ -39,7 +39,7 @@ service BasicHotStuff {
   }
 
   rpc Decide(Msg) returns (google.protobuf.Empty) {
-    option (gorums.unicast) = true;
+    option (gorums.multicast) = true;
   }
 
   rpc SendRequest(Request) returns (google.protobuf.Empty) {
