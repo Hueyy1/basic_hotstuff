@@ -12,6 +12,7 @@ import (
 	"hxy352/src/model"
 	"hxy352/src/proto/basichotstuffpb"
 	"hxy352/src/proto/clientpb"
+	"hxy352/src/service"
 	"net"
 	"strconv"
 	"sync"
@@ -24,6 +25,7 @@ type ClientImpl struct {
 	conf           *model.Config
 	nodes          []*basichotstuffpb.Node
 	allNodesConfig *basichotstuffpb.Configuration
+	timeout        service.TimeoutService
 
 	mutex   sync.Mutex
 	resMap  map[string][]string
@@ -36,8 +38,11 @@ func NewClientImpl(conf *model.Config) *ClientImpl {
 		resMap:  make(map[string][]string),
 		doneMap: make(map[string]struct{}),
 		conf:    conf,
+		timeout: service.NewTimeoutService(1 * time.Second),
 	}
 	c.initClient()
+	c.timeout.Reset()
+	c.timeout.Stop()
 	return c
 }
 
@@ -128,19 +133,17 @@ func (s *ClientImpl) SendRequests() {
 
 		s.allNodesConfig.SendRequest(context.Background(), req)
 		log.Infof("Sending request to %v: %s", s.nodes[i%s.conf.ReplicaNumber].Address(), req.String())
+		s.timeout.SoftStart()
 
-		_ = <-s.Chan
+		select {
+		case <-s.Chan:
+			s.timeout.Stop()
+			i++
 
-		//os.Exit(0)
-
-		//if i == 1000 {
-		//	// exit
-		//	os.Exit(0)
-		//	return
-		//}
-
-		// time.Sleep(time.Second)
-		// time.Sleep(time.Millisecond * 5)
-		i++
+			continue
+		case <-s.timeout.Timeout():
+			log.Warnf("Timeout received, resend cmd %s !!!", req.Cmd)
+			s.timeout.Stop()
+		}
 	}
 }

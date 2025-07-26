@@ -29,8 +29,7 @@ type BasicHotStuff struct {
 
 	Ready chan struct{} // current
 
-	MsgChan chan *basichotstuffpb.Msg
-	//PendingMessages map[types.View][]*basichotstuffpb.Msg
+	MsgChan  chan *basichotstuffpb.Msg
 	MsgQueue *service.MessageQueueService
 
 	Nodes  []*basichotstuffpb.Node // All nodes in the configuration
@@ -83,7 +82,7 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		CmdCache: service.NewCmdCache(),
 		Ready:    make(chan struct{}),
 
-		timeout: service.NewTimeoutService(5 * time.Second),
+		timeout: service.NewTimeoutService(1 * time.Second),
 
 		MsgChan: make(chan *basichotstuffpb.Msg, 1000),
 		//PendingMessages: make(map[types.View][]*basichotstuffpb.Msg),
@@ -201,8 +200,8 @@ func (hs *BasicHotStuff) HandleMsg() {
 			hs.timeout.Reset()
 			hs.timeout.Stop()
 
-			// create empty block
-			hs.BlockChain.Store(hs.CreateLeaf(hs.CurrentBlock.Parent(), types.QuorumCert{}, ""))
+			// todo: if need create empty block???
+			//hs.BlockChain.Store(hs.CreateLeaf(hs.CurrentBlock.Parent(), types.QuorumCert{}, ""))
 
 			hs.mut.Lock()
 
@@ -227,11 +226,12 @@ func (hs *BasicHotStuff) HandleReq() {
 
 			for {
 				req, ok := hs.CmdCache.Dequeue()
-				log.Infof("hs.CmdCache.Dequeue(): %+v", req)
+				log.Debugf("hs.CmdCache.Dequeue(): %+v", req)
 				if !ok {
 					continue
 				}
 				if hs.CmdCache.IsFinished(req.GetCmd()) {
+					log.Debugf("hs.CmdCache.IsFinished(): %+v", req.GetCmd())
 					continue
 				}
 				hs.SendPrepare(req)
@@ -443,7 +443,7 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 		CommitTime:  nil,
 	})
 
-	// leader msgs
+	hs.timeout.SoftStart()
 
 	return
 }
@@ -1218,7 +1218,6 @@ func (hs *BasicHotStuff) processNewView() {
 
 	hs.ViewChanging = false
 	log.Infof("processNewView: new view %d finished, next view len: %d", hs.CurrentView, len(hs.MsgQueue.Get(hs.CurrentView+1)))
-	log.Infof("123: %+v", hs.MsgQueue.Get(hs.CurrentView+1))
 
 	// 通知handleReq
 	hs.Ready <- struct{}{}
