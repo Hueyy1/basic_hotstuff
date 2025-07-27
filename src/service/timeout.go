@@ -7,16 +7,17 @@ type TimeoutService interface {
 	Reset()
 	Stop()
 	Timeout() <-chan time.Time
+	Duration() time.Duration
 }
 
 type TimeoutServiceImpl struct {
-	Duration  time.Duration
+	duration  time.Duration
 	Timer     *time.Timer
 	isStarted bool
 }
 
 func NewTimeoutService(duration time.Duration) TimeoutService {
-	t := &TimeoutServiceImpl{Duration: duration, Timer: time.NewTimer(duration)}
+	t := &TimeoutServiceImpl{duration: duration, Timer: time.NewTimer(duration)}
 	t.Stop()
 	return t
 }
@@ -30,7 +31,7 @@ func (t *TimeoutServiceImpl) SoftStart() {
 }
 
 func (t *TimeoutServiceImpl) Reset() {
-	t.Timer.Reset(t.Duration)
+	t.Timer.Reset(t.duration)
 }
 
 func (t *TimeoutServiceImpl) Stop() {
@@ -40,4 +41,8 @@ func (t *TimeoutServiceImpl) Stop() {
 
 func (t *TimeoutServiceImpl) Timeout() <-chan time.Time {
 	return t.Timer.C
+}
+
+func (t *TimeoutServiceImpl) Duration() time.Duration {
+	return t.duration
 }

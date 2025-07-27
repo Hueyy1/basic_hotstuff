@@ -10,6 +10,7 @@ import (
 	"hxy352/src/server"
 	"hxy352/src/types"
 	"net"
+	"time"
 	//_ "net/http/pprof"
 )
 
@@ -72,7 +73,13 @@ func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
 
 	go srv.Consensus.HandleMsg()
 
-	go srv.Consensus.HandleReq()
+	go srv.Consensus.PaceMaker.OnBeat()
+
+	go func() {
+		cView := srv.Consensus.CurrentView
+		srv.Consensus.ProcessCurrentViewQueue(cView)
+		time.Sleep(10 * time.Millisecond)
+	}()
 
 	gorumsSrv.Serve(lis)
 

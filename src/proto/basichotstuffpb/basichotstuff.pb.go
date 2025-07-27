@@ -78,13 +78,18 @@ func (x *Request) GetClientAddress() string {
 }
 
 type Msg struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          commonpb.MessageType   `protobuf:"varint,1,opt,name=Type,proto3,enum=commonpb.MessageType" json:"Type,omitempty"` // Type of the message
-	View          uint64                 `protobuf:"varint,2,opt,name=View,proto3" json:"View,omitempty"`
-	Block         *Block                 `protobuf:"bytes,3,opt,name=Block,proto3" json:"Block,omitempty"`
-	PartialCert   *PartialCert           `protobuf:"bytes,4,opt,name=PartialCert,proto3" json:"PartialCert,omitempty"`
-	QC            *QuorumCert            `protobuf:"bytes,5,opt,name=QC,proto3" json:"QC,omitempty"`
-	ReplicaId     uint32                 `protobuf:"varint,6,opt,name=ReplicaId,proto3" json:"ReplicaId,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Type        commonpb.MessageType   `protobuf:"varint,1,opt,name=Type,proto3,enum=commonpb.MessageType" json:"Type,omitempty"` // Type of the message
+	View        uint64                 `protobuf:"varint,2,opt,name=View,proto3" json:"View,omitempty"`
+	Block       *Block                 `protobuf:"bytes,3,opt,name=Block,proto3" json:"Block,omitempty"`
+	PartialCert *PartialCert           `protobuf:"bytes,4,opt,name=PartialCert,proto3" json:"PartialCert,omitempty"`
+	QC          *QuorumCert            `protobuf:"bytes,5,opt,name=QC,proto3" json:"QC,omitempty"`
+	ReplicaId   uint32                 `protobuf:"varint,6,opt,name=ReplicaId,proto3" json:"ReplicaId,omitempty"`
+	// for wish next view and timeout
+	ViewSig *QuorumSignature `protobuf:"bytes,7,opt,name=ViewSig,proto3" json:"ViewSig,omitempty"`
+	// for timeout
+	TC            *TimeoutCert     `protobuf:"bytes,8,opt,name=TC,proto3" json:"TC,omitempty"`
+	MsgSig        *QuorumSignature `protobuf:"bytes,9,opt,name=MsgSig,proto3" json:"MsgSig,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -159,6 +164,27 @@ func (x *Msg) GetReplicaId() uint32 {
 		return x.ReplicaId
 	}
 	return 0
+}
+
+func (x *Msg) GetViewSig() *QuorumSignature {
+	if x != nil {
+		return x.ViewSig
+	}
+	return nil
+}
+
+func (x *Msg) GetTC() *TimeoutCert {
+	if x != nil {
+		return x.TC
+	}
+	return nil
+}
+
+func (x *Msg) GetMsgSig() *QuorumSignature {
+	if x != nil {
+		return x.MsgSig
+	}
+	return nil
 }
 
 type BlockHash struct {
@@ -653,6 +679,58 @@ func (x *QuorumCert) GetType() commonpb.MessageType {
 	return commonpb.MessageType(0)
 }
 
+type TimeoutCert struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sig           *QuorumSignature       `protobuf:"bytes,1,opt,name=Sig,proto3" json:"Sig,omitempty"`
+	View          uint64                 `protobuf:"varint,2,opt,name=View,proto3" json:"View,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TimeoutCert) Reset() {
+	*x = TimeoutCert{}
+	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TimeoutCert) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TimeoutCert) ProtoMessage() {}
+
+func (x *TimeoutCert) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TimeoutCert.ProtoReflect.Descriptor instead.
+func (*TimeoutCert) Descriptor() ([]byte, []int) {
+	return file_proto_basichotstuffpb_basichotstuff_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *TimeoutCert) GetSig() *QuorumSignature {
+	if x != nil {
+		return x.Sig
+	}
+	return nil
+}
+
+func (x *TimeoutCert) GetView() uint64 {
+	if x != nil {
+		return x.View
+	}
+	return 0
+}
+
 type SyncInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QC            *QuorumCert            `protobuf:"bytes,1,opt,name=QC,proto3" json:"QC,omitempty"`
@@ -662,7 +740,7 @@ type SyncInfo struct {
 
 func (x *SyncInfo) Reset() {
 	*x = SyncInfo{}
-	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[10]
+	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -674,7 +752,7 @@ func (x *SyncInfo) String() string {
 func (*SyncInfo) ProtoMessage() {}
 
 func (x *SyncInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[10]
+	mi := &file_proto_basichotstuffpb_basichotstuff_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -687,7 +765,7 @@ func (x *SyncInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncInfo.ProtoReflect.Descriptor instead.
 func (*SyncInfo) Descriptor() ([]byte, []int) {
-	return file_proto_basichotstuffpb_basichotstuff_proto_rawDescGZIP(), []int{10}
+	return file_proto_basichotstuffpb_basichotstuff_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SyncInfo) GetQC() *QuorumCert {
@@ -704,14 +782,17 @@ const file_proto_basichotstuffpb_basichotstuff_proto_rawDesc = "" +
 	")proto/basichotstuffpb/basichotstuff.proto\x12\x0fbasichotstuffpb\x1a\fgorums.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bproto/commonpb/common.proto\"A\n" +
 	"\aRequest\x12\x10\n" +
 	"\x03cmd\x18\x01 \x01(\tR\x03cmd\x12$\n" +
-	"\rclientAddress\x18\x02 \x01(\tR\rclientAddress\"\xfd\x01\n" +
+	"\rclientAddress\x18\x02 \x01(\tR\rclientAddress\"\xa1\x03\n" +
 	"\x03Msg\x12)\n" +
 	"\x04Type\x18\x01 \x01(\x0e2\x15.commonpb.MessageTypeR\x04Type\x12\x12\n" +
 	"\x04View\x18\x02 \x01(\x04R\x04View\x12,\n" +
 	"\x05Block\x18\x03 \x01(\v2\x16.basichotstuffpb.BlockR\x05Block\x12>\n" +
 	"\vPartialCert\x18\x04 \x01(\v2\x1c.basichotstuffpb.PartialCertR\vPartialCert\x12+\n" +
 	"\x02QC\x18\x05 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC\x12\x1c\n" +
-	"\tReplicaId\x18\x06 \x01(\rR\tReplicaId\"\x1f\n" +
+	"\tReplicaId\x18\x06 \x01(\rR\tReplicaId\x12:\n" +
+	"\aViewSig\x18\a \x01(\v2 .basichotstuffpb.QuorumSignatureR\aViewSig\x12,\n" +
+	"\x02TC\x18\b \x01(\v2\x1c.basichotstuffpb.TimeoutCertR\x02TC\x128\n" +
+	"\x06MsgSig\x18\t \x01(\v2 .basichotstuffpb.QuorumSignatureR\x06MsgSig\"\x1f\n" +
 	"\tBlockHash\x12\x12\n" +
 	"\x04Hash\x18\x01 \x01(\fR\x04Hash\"\xe4\x01\n" +
 	"\x05Block\x12\x16\n" +
@@ -742,11 +823,14 @@ const file_proto_basichotstuffpb_basichotstuff_proto_rawDesc = "" +
 	"\x03Sig\x18\x01 \x01(\v2 .basichotstuffpb.QuorumSignatureR\x03Sig\x12\x12\n" +
 	"\x04View\x18\x02 \x01(\x04R\x04View\x12\x12\n" +
 	"\x04Hash\x18\x03 \x01(\fR\x04Hash\x12)\n" +
-	"\x04Type\x18\x04 \x01(\x0e2\x15.commonpb.MessageTypeR\x04Type\"7\n" +
+	"\x04Type\x18\x04 \x01(\x0e2\x15.commonpb.MessageTypeR\x04Type\"U\n" +
+	"\vTimeoutCert\x122\n" +
+	"\x03Sig\x18\x01 \x01(\v2 .basichotstuffpb.QuorumSignatureR\x03Sig\x12\x12\n" +
+	"\x04View\x18\x02 \x01(\x04R\x04View\"7\n" +
 	"\bSyncInfo\x12+\n" +
-	"\x02QC\x18\x01 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC2\xdb\x04\n" +
+	"\x02QC\x18\x01 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC2\xa1\x06\n" +
 	"\rBasicHotStuff\x12=\n" +
-	"\aNewView\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12=\n" +
+	"\aNewView\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12=\n" +
 	"\aPrepare\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12A\n" +
 	"\vPrepareVote\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12?\n" +
 	"\tPreCommit\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12C\n" +
@@ -755,7 +839,10 @@ const file_proto_basichotstuffpb_basichotstuff_proto_rawDesc = "" +
 	"\n" +
 	"CommitVote\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12<\n" +
 	"\x06Decide\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12E\n" +
-	"\vSendRequest\x12\x18.basichotstuffpb.Request\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01B\"Z hxy352/src/proto/basichotstuffpbb\x06proto3"
+	"\vSendRequest\x12\x18.basichotstuffpb.Request\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12B\n" +
+	"\fWishNextView\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12=\n" +
+	"\aTimeout\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12A\n" +
+	"\vTimeoutVote\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01B\"Z hxy352/src/proto/basichotstuffpbb\x06proto3"
 
 var (
 	file_proto_basichotstuffpb_basichotstuff_proto_rawDescOnce sync.Once
@@ -769,7 +856,7 @@ func file_proto_basichotstuffpb_basichotstuff_proto_rawDescGZIP() []byte {
 	return file_proto_basichotstuffpb_basichotstuff_proto_rawDescData
 }
 
-var file_proto_basichotstuffpb_basichotstuff_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_proto_basichotstuffpb_basichotstuff_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_proto_basichotstuffpb_basichotstuff_proto_goTypes = []any{
 	(*Request)(nil),               // 0: basichotstuffpb.Request
 	(*Msg)(nil),                   // 1: basichotstuffpb.Msg
@@ -781,48 +868,59 @@ var file_proto_basichotstuffpb_basichotstuff_proto_goTypes = []any{
 	(*ECDSAMultiSignature)(nil),   // 7: basichotstuffpb.ECDSAMultiSignature
 	(*QuorumSignature)(nil),       // 8: basichotstuffpb.QuorumSignature
 	(*QuorumCert)(nil),            // 9: basichotstuffpb.QuorumCert
-	(*SyncInfo)(nil),              // 10: basichotstuffpb.SyncInfo
-	(commonpb.MessageType)(0),     // 11: commonpb.MessageType
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),         // 13: google.protobuf.Empty
+	(*TimeoutCert)(nil),           // 10: basichotstuffpb.TimeoutCert
+	(*SyncInfo)(nil),              // 11: basichotstuffpb.SyncInfo
+	(commonpb.MessageType)(0),     // 12: commonpb.MessageType
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),         // 14: google.protobuf.Empty
 }
 var file_proto_basichotstuffpb_basichotstuff_proto_depIdxs = []int32{
-	11, // 0: basichotstuffpb.Msg.Type:type_name -> commonpb.MessageType
+	12, // 0: basichotstuffpb.Msg.Type:type_name -> commonpb.MessageType
 	3,  // 1: basichotstuffpb.Msg.Block:type_name -> basichotstuffpb.Block
 	6,  // 2: basichotstuffpb.Msg.PartialCert:type_name -> basichotstuffpb.PartialCert
 	9,  // 3: basichotstuffpb.Msg.QC:type_name -> basichotstuffpb.QuorumCert
-	9,  // 4: basichotstuffpb.Block.QC:type_name -> basichotstuffpb.QuorumCert
-	12, // 5: basichotstuffpb.Block.Timestamp:type_name -> google.protobuf.Timestamp
-	4,  // 6: basichotstuffpb.Signature.ECDSASig:type_name -> basichotstuffpb.ECDSASignature
-	8,  // 7: basichotstuffpb.PartialCert.Sig:type_name -> basichotstuffpb.QuorumSignature
-	4,  // 8: basichotstuffpb.ECDSAMultiSignature.Sigs:type_name -> basichotstuffpb.ECDSASignature
-	7,  // 9: basichotstuffpb.QuorumSignature.ECDSASigs:type_name -> basichotstuffpb.ECDSAMultiSignature
-	8,  // 10: basichotstuffpb.QuorumCert.Sig:type_name -> basichotstuffpb.QuorumSignature
-	11, // 11: basichotstuffpb.QuorumCert.Type:type_name -> commonpb.MessageType
-	9,  // 12: basichotstuffpb.SyncInfo.QC:type_name -> basichotstuffpb.QuorumCert
-	1,  // 13: basichotstuffpb.BasicHotStuff.NewView:input_type -> basichotstuffpb.Msg
-	1,  // 14: basichotstuffpb.BasicHotStuff.Prepare:input_type -> basichotstuffpb.Msg
-	1,  // 15: basichotstuffpb.BasicHotStuff.PrepareVote:input_type -> basichotstuffpb.Msg
-	1,  // 16: basichotstuffpb.BasicHotStuff.PreCommit:input_type -> basichotstuffpb.Msg
-	1,  // 17: basichotstuffpb.BasicHotStuff.PreCommitVote:input_type -> basichotstuffpb.Msg
-	1,  // 18: basichotstuffpb.BasicHotStuff.Commit:input_type -> basichotstuffpb.Msg
-	1,  // 19: basichotstuffpb.BasicHotStuff.CommitVote:input_type -> basichotstuffpb.Msg
-	1,  // 20: basichotstuffpb.BasicHotStuff.Decide:input_type -> basichotstuffpb.Msg
-	0,  // 21: basichotstuffpb.BasicHotStuff.SendRequest:input_type -> basichotstuffpb.Request
-	13, // 22: basichotstuffpb.BasicHotStuff.NewView:output_type -> google.protobuf.Empty
-	13, // 23: basichotstuffpb.BasicHotStuff.Prepare:output_type -> google.protobuf.Empty
-	13, // 24: basichotstuffpb.BasicHotStuff.PrepareVote:output_type -> google.protobuf.Empty
-	13, // 25: basichotstuffpb.BasicHotStuff.PreCommit:output_type -> google.protobuf.Empty
-	13, // 26: basichotstuffpb.BasicHotStuff.PreCommitVote:output_type -> google.protobuf.Empty
-	13, // 27: basichotstuffpb.BasicHotStuff.Commit:output_type -> google.protobuf.Empty
-	13, // 28: basichotstuffpb.BasicHotStuff.CommitVote:output_type -> google.protobuf.Empty
-	13, // 29: basichotstuffpb.BasicHotStuff.Decide:output_type -> google.protobuf.Empty
-	13, // 30: basichotstuffpb.BasicHotStuff.SendRequest:output_type -> google.protobuf.Empty
-	22, // [22:31] is the sub-list for method output_type
-	13, // [13:22] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	8,  // 4: basichotstuffpb.Msg.ViewSig:type_name -> basichotstuffpb.QuorumSignature
+	10, // 5: basichotstuffpb.Msg.TC:type_name -> basichotstuffpb.TimeoutCert
+	8,  // 6: basichotstuffpb.Msg.MsgSig:type_name -> basichotstuffpb.QuorumSignature
+	9,  // 7: basichotstuffpb.Block.QC:type_name -> basichotstuffpb.QuorumCert
+	13, // 8: basichotstuffpb.Block.Timestamp:type_name -> google.protobuf.Timestamp
+	4,  // 9: basichotstuffpb.Signature.ECDSASig:type_name -> basichotstuffpb.ECDSASignature
+	8,  // 10: basichotstuffpb.PartialCert.Sig:type_name -> basichotstuffpb.QuorumSignature
+	4,  // 11: basichotstuffpb.ECDSAMultiSignature.Sigs:type_name -> basichotstuffpb.ECDSASignature
+	7,  // 12: basichotstuffpb.QuorumSignature.ECDSASigs:type_name -> basichotstuffpb.ECDSAMultiSignature
+	8,  // 13: basichotstuffpb.QuorumCert.Sig:type_name -> basichotstuffpb.QuorumSignature
+	12, // 14: basichotstuffpb.QuorumCert.Type:type_name -> commonpb.MessageType
+	8,  // 15: basichotstuffpb.TimeoutCert.Sig:type_name -> basichotstuffpb.QuorumSignature
+	9,  // 16: basichotstuffpb.SyncInfo.QC:type_name -> basichotstuffpb.QuorumCert
+	1,  // 17: basichotstuffpb.BasicHotStuff.NewView:input_type -> basichotstuffpb.Msg
+	1,  // 18: basichotstuffpb.BasicHotStuff.Prepare:input_type -> basichotstuffpb.Msg
+	1,  // 19: basichotstuffpb.BasicHotStuff.PrepareVote:input_type -> basichotstuffpb.Msg
+	1,  // 20: basichotstuffpb.BasicHotStuff.PreCommit:input_type -> basichotstuffpb.Msg
+	1,  // 21: basichotstuffpb.BasicHotStuff.PreCommitVote:input_type -> basichotstuffpb.Msg
+	1,  // 22: basichotstuffpb.BasicHotStuff.Commit:input_type -> basichotstuffpb.Msg
+	1,  // 23: basichotstuffpb.BasicHotStuff.CommitVote:input_type -> basichotstuffpb.Msg
+	1,  // 24: basichotstuffpb.BasicHotStuff.Decide:input_type -> basichotstuffpb.Msg
+	0,  // 25: basichotstuffpb.BasicHotStuff.SendRequest:input_type -> basichotstuffpb.Request
+	1,  // 26: basichotstuffpb.BasicHotStuff.WishNextView:input_type -> basichotstuffpb.Msg
+	1,  // 27: basichotstuffpb.BasicHotStuff.Timeout:input_type -> basichotstuffpb.Msg
+	1,  // 28: basichotstuffpb.BasicHotStuff.TimeoutVote:input_type -> basichotstuffpb.Msg
+	14, // 29: basichotstuffpb.BasicHotStuff.NewView:output_type -> google.protobuf.Empty
+	14, // 30: basichotstuffpb.BasicHotStuff.Prepare:output_type -> google.protobuf.Empty
+	14, // 31: basichotstuffpb.BasicHotStuff.PrepareVote:output_type -> google.protobuf.Empty
+	14, // 32: basichotstuffpb.BasicHotStuff.PreCommit:output_type -> google.protobuf.Empty
+	14, // 33: basichotstuffpb.BasicHotStuff.PreCommitVote:output_type -> google.protobuf.Empty
+	14, // 34: basichotstuffpb.BasicHotStuff.Commit:output_type -> google.protobuf.Empty
+	14, // 35: basichotstuffpb.BasicHotStuff.CommitVote:output_type -> google.protobuf.Empty
+	14, // 36: basichotstuffpb.BasicHotStuff.Decide:output_type -> google.protobuf.Empty
+	14, // 37: basichotstuffpb.BasicHotStuff.SendRequest:output_type -> google.protobuf.Empty
+	14, // 38: basichotstuffpb.BasicHotStuff.WishNextView:output_type -> google.protobuf.Empty
+	14, // 39: basichotstuffpb.BasicHotStuff.Timeout:output_type -> google.protobuf.Empty
+	14, // 40: basichotstuffpb.BasicHotStuff.TimeoutVote:output_type -> google.protobuf.Empty
+	29, // [29:41] is the sub-list for method output_type
+	17, // [17:29] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_proto_basichotstuffpb_basichotstuff_proto_init() }
@@ -842,7 +940,7 @@ func file_proto_basichotstuffpb_basichotstuff_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_basichotstuffpb_basichotstuff_proto_rawDesc), len(file_proto_basichotstuffpb_basichotstuff_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

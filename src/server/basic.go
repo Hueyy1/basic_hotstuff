@@ -120,3 +120,21 @@ func (s *BasicHotStuffImpl) SendRequest(ctx gorums.ServerCtx, req *basichotstuff
 	return
 
 }
+
+func (s *BasicHotStuffImpl) WishNextView(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
+	log.Debugf("WishNextView request: %+v", msg)
+
+	s.Consensus.MsgChan <- msg
+}
+
+func (s *BasicHotStuffImpl) Timeout(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
+	log.Debugf("Timeout request: %+v", msg)
+
+	s.Consensus.MsgChan <- msg
+}
+
+func (s *BasicHotStuffImpl) TimeoutVote(ctx gorums.ServerCtx, msg *basichotstuffpb.Msg) {
+	log.Debugf("TimeoutVote request: %+v", msg)
+
+	s.Consensus.MsgChan <- msg
+}

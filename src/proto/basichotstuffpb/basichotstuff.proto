@@ -11,7 +11,7 @@ option go_package = "hxy352/src/proto/basichotstuffpb";
 
 service BasicHotStuff {
   rpc NewView(Msg) returns (google.protobuf.Empty) {
-    option (gorums.unicast) = true;
+    option (gorums.multicast) = true;
   }
 
   rpc Prepare(Msg) returns (google.protobuf.Empty) {
@@ -46,6 +46,17 @@ service BasicHotStuff {
     option (gorums.multicast) = true;
   }
 
+  rpc WishNextView(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
+  rpc Timeout(Msg) returns (google.protobuf.Empty) {
+    option (gorums.multicast) = true;
+  }
+
+  rpc TimeoutVote(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
 }
 
 message Request {
@@ -60,6 +71,13 @@ message Msg {
   PartialCert PartialCert = 4;
   QuorumCert QC = 5;
   uint32 ReplicaId = 6;
+
+  // for wish next view and timeout
+  QuorumSignature ViewSig = 7;
+
+  // for timeout
+  TimeoutCert TC = 8;
+  QuorumSignature MsgSig = 9;
 }
 
 message BlockHash {
@@ -106,6 +124,11 @@ message QuorumCert {
   uint64 View = 2;
   bytes Hash = 3;
   commonpb.MessageType Type = 4;
+}
+
+message TimeoutCert {
+  QuorumSignature Sig = 1;
+  uint64 View = 2;
 }
 
 message SyncInfo {

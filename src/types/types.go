@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"crypto"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
@@ -320,10 +321,32 @@ func (tc TimeoutCert) String() string {
 	return fmt.Sprintf("TC{ view: %d, IDs: [ %s] }", tc.view, &sb)
 }
 
+func (tc TimeoutCert) Hash() Hash {
+	return sha256.Sum256(tc.ToBytes())
+}
+
 func writeParticipants(wr io.Writer, participants IDSet) (err error) {
 	participants.RangeWhile(func(id ID) bool {
 		_, err = fmt.Fprintf(wr, "%d ", id)
 		return err == nil
 	})
 	return err
+}
+
+type TimeoutVote struct {
+	View View
+	TC   TimeoutCert
+}
+
+func NewTimeoutVote(view View, tc TimeoutCert) TimeoutVote {
+	return TimeoutVote{view, tc}
+}
+
+func (tv TimeoutVote) ToBytes() []byte {
+	tcByte := tv.TC.ToBytes()
+	buf := make([]byte, 8+len(tcByte))
+	binary.BigEndian.PutUint64(buf[:8], uint64(tv.View))
+	copy(buf[8:], tcByte)
+	h := sha256.Sum256(buf)
+	return h[:]
 }

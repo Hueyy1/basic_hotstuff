@@ -111,3 +111,16 @@ func PartialCertFromProto(cert *PartialCert) types.PartialCert {
 	copy(h[:], cert.GetHash())
 	return types.NewPartialCert(QuorumSignatureFromProto(cert.GetSig()), h)
 }
+
+// TimeoutCertFromProto converts a timeout certificate from the protobuf type to the hotstuff type.
+func TimeoutCertFromProto(m *TimeoutCert) types.TimeoutCert {
+	return types.NewTimeoutCert(QuorumSignatureFromProto(m.GetSig()), types.View(m.GetView()))
+}
+
+// TimeoutCertToProto converts a timeout certificate from the hotstuff type to the protobuf type.
+func TimeoutCertToProto(timeoutCert types.TimeoutCert) *TimeoutCert {
+	return &TimeoutCert{
+		View: uint64(timeoutCert.View()),
+		Sig:  QuorumSignatureToProto(timeoutCert.Signature()),
+	}
+}

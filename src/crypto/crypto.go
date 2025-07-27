@@ -28,13 +28,18 @@ type Crypto interface {
 	// CreateQuorumCert creates a quorum certificate from a list of partial certificates.
 	CreateQuorumCert(block *model.Block, signatures []types.PartialCert) (cert types.QuorumCert, err error)
 	// CreateTimeoutCert creates a timeout certificate from a list of timeout messages.
-	CreateTimeoutCert(view types.View, timeouts []model.TimeoutMsg) (cert types.TimeoutCert, err error)
+	CreateTimeoutCert(view types.View, sigs []types.QuorumSignature) (cert types.TimeoutCert, err error)
 	// VerifyPartialCert verifies a single partial certificate.
 	VerifyPartialCert(block *model.Block, cert types.PartialCert) bool
 	// VerifyQuorumCert verifies a quorum certificate.
 	VerifyQuorumCert(block *model.Block, qc types.QuorumCert) bool
 	// VerifyTimeoutCert verifies a timeout certificate.
 	VerifyTimeoutCert(tc types.TimeoutCert) bool
+
+	CreateTimeoutVoteCert(tv types.TimeoutVote) (cert types.QuorumSignature, err error)
+	VerifyTimeoutVoteCert(tv types.TimeoutVote, sig types.QuorumSignature) bool
+	CreateTimeoutQuorumCert(tv types.TimeoutVote, sigs []types.QuorumSignature) (cert types.QuorumCert, err error)
+	VerifyTimeoutQuorumCert(tv types.TimeoutVote, qc types.QuorumCert) bool
 }
 
 // todo: quick show
@@ -133,14 +138,10 @@ func (c CryptoImpl) CreateQuorumCert(block *model.Block, signatures []types.Part
 }
 
 // CreateTimeoutCert creates a timeout certificate from a list of timeout messages.
-func (c CryptoImpl) CreateTimeoutCert(view types.View, timeouts []model.TimeoutMsg) (cert types.TimeoutCert, err error) {
+func (c CryptoImpl) CreateTimeoutCert(view types.View, sigs []types.QuorumSignature) (cert types.TimeoutCert, err error) {
 	// view 0 is always valid.
 	if view == 0 {
 		return types.NewTimeoutCert(nil, 0), nil
-	}
-	sigs := make([]types.QuorumSignature, 0, len(timeouts))
-	for _, timeout := range timeouts {
-		sigs = append(sigs, timeout.ViewSignature)
 	}
 	sig, err := c.Combine(sigs...)
 	if err != nil {
@@ -186,8 +187,37 @@ func (c CryptoImpl) VerifyTimeoutCert(tc types.TimeoutCert) bool {
 	//if tc.Signature().Participants().Len() < c.configuration.QuorumSize() {
 	//	return false
 	//}
-	if tc.Signature().Participants().Len() < QuorumSize {
+	if tc.Signature().Participants().Len() < FaultSize+1 {
 		return false
 	}
 	return c.Verify(tc.Signature(), tc.View().ToBytes())
+}
+
+func (c CryptoImpl) CreateTimeoutVoteCert(tv types.TimeoutVote) (cert types.QuorumSignature, err error) {
+	return c.Sign(tv.ToBytes())
+}
+
+func (c CryptoImpl) VerifyTimeoutVoteCert(tv types.TimeoutVote, sig types.QuorumSignature) bool {
+	return c.Verify(sig, tv.ToBytes())
+}
+
+func (c CryptoImpl) CreateTimeoutQuorumCert(tv types.TimeoutVote, sigs []types.QuorumSignature) (cert types.QuorumCert, err error) {
+	sig, err := c.Combine(sigs...)
+	if err != nil {
+		return types.QuorumCert{}, err
+	}
+	return types.NewQuorumCert(sig, tv.View, tv.TC.Hash()), nil
+}
+
+func (c CryptoImpl) VerifyTimeoutQuorumCert(tv types.TimeoutVote, qc types.QuorumCert) bool {
+	qcSignature := qc.Signature()
+	if qcSignature == nil {
+		log.Panicf("quorum certificate has nil signature (view=%d)", qc.View())
+	}
+
+	participants := qcSignature.Participants()
+	if participants.Len() < QuorumSize {
+		return false
+	}
+	return c.Verify(qc.Signature(), tv.ToBytes())
 }

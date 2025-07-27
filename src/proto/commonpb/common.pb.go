@@ -33,20 +33,26 @@ const (
 	MessageType_Commit        MessageType = 6
 	MessageType_CommitVote    MessageType = 7
 	MessageType_Decide        MessageType = 8
+	MessageType_WishNextView  MessageType = 9
+	MessageType_Timeout       MessageType = 10
+	MessageType_TimeoutVote   MessageType = 11
 )
 
 // Enum value maps for MessageType.
 var (
 	MessageType_name = map[int32]string{
-		0: "Unknown",
-		1: "NewView",
-		2: "Prepare",
-		3: "PrepareVote",
-		4: "PreCommit",
-		5: "PreCommitVote",
-		6: "Commit",
-		7: "CommitVote",
-		8: "Decide",
+		0:  "Unknown",
+		1:  "NewView",
+		2:  "Prepare",
+		3:  "PrepareVote",
+		4:  "PreCommit",
+		5:  "PreCommitVote",
+		6:  "Commit",
+		7:  "CommitVote",
+		8:  "Decide",
+		9:  "WishNextView",
+		10: "Timeout",
+		11: "TimeoutVote",
 	}
 	MessageType_value = map[string]int32{
 		"Unknown":       0,
@@ -58,6 +64,9 @@ var (
 		"Commit":        6,
 		"CommitVote":    7,
 		"Decide":        8,
+		"WishNextView":  9,
+		"Timeout":       10,
+		"TimeoutVote":   11,
 	}
 )
 
@@ -92,7 +101,7 @@ var File_proto_commonpb_common_proto protoreflect.FileDescriptor
 
 const file_proto_commonpb_common_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproto/commonpb/common.proto\x12\bcommonpb*\x8f\x01\n" +
+	"\x1bproto/commonpb/common.proto\x12\bcommonpb*\xbf\x01\n" +
 	"\vMessageType\x12\v\n" +
 	"\aUnknown\x10\x00\x12\v\n" +
 	"\aNewView\x10\x01\x12\v\n" +
@@ -105,7 +114,11 @@ const file_proto_commonpb_common_proto_rawDesc = "" +
 	"\n" +
 	"CommitVote\x10\a\x12\n" +
 	"\n" +
-	"\x06Decide\x10\bB\x1bZ\x19hxy352/src/proto/commonpbb\x06proto3"
+	"\x06Decide\x10\b\x12\x10\n" +
+	"\fWishNextView\x10\t\x12\v\n" +
+	"\aTimeout\x10\n" +
+	"\x12\x0f\n" +
+	"\vTimeoutVote\x10\vB\x1bZ\x19hxy352/src/proto/commonpbb\x06proto3"
 
 var (
 	file_proto_commonpb_common_proto_rawDescOnce sync.Once

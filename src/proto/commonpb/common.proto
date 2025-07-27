@@ -14,4 +14,7 @@ enum MessageType {
   Commit = 6;
   CommitVote = 7;
   Decide = 8;
+  WishNextView = 9;
+  Timeout = 10;
+  TimeoutVote = 11;
 }

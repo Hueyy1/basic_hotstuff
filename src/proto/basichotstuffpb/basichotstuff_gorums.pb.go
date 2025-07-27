@@ -151,11 +151,13 @@ type Node struct {
 
 // BasicHotStuffClient is the client interface for the BasicHotStuff service.
 type BasicHotStuffClient interface {
+	NewView(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	Prepare(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	PreCommit(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	Commit(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	Decide(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	SendRequest(ctx context.Context, in *Request, opts ...gorums.CallOption)
+	Timeout(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 }
 
 // enforce interface compliance
@@ -163,14 +165,29 @@ var _ BasicHotStuffClient = (*Configuration)(nil)
 
 // BasicHotStuffNodeClient is the single node client interface for the BasicHotStuff service.
 type BasicHotStuffNodeClient interface {
-	NewView(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	PrepareVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	PreCommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	CommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
+	WishNextView(ctx context.Context, in *Msg, opts ...gorums.CallOption)
+	TimeoutVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 }
 
 // enforce interface compliance
 var _ BasicHotStuffNodeClient = (*Node)(nil)
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// NewView is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (c *Configuration) NewView(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.QuorumCallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.NewView",
+	}
+
+	c.RawConfiguration.Multicast(ctx, cd, opts...)
+}
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ emptypb.Empty
@@ -242,6 +259,20 @@ func (c *Configuration) SendRequest(ctx context.Context, in *Request, opts ...go
 	c.RawConfiguration.Multicast(ctx, cd, opts...)
 }
 
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// Timeout is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (c *Configuration) Timeout(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.QuorumCallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.Timeout",
+	}
+
+	c.RawConfiguration.Multicast(ctx, cd, opts...)
+}
+
 // There are no quorum calls.
 type QuorumSpec interface{}
 
@@ -256,6 +287,9 @@ type BasicHotStuffServer interface {
 	CommitVote(ctx gorums.ServerCtx, request *Msg)
 	Decide(ctx gorums.ServerCtx, request *Msg)
 	SendRequest(ctx gorums.ServerCtx, request *Request)
+	WishNextView(ctx gorums.ServerCtx, request *Msg)
+	Timeout(ctx gorums.ServerCtx, request *Msg)
+	TimeoutVote(ctx gorums.ServerCtx, request *Msg)
 }
 
 func RegisterBasicHotStuffServer(srv *gorums.Server, impl BasicHotStuffServer) {
@@ -304,20 +338,21 @@ func RegisterBasicHotStuffServer(srv *gorums.Server, impl BasicHotStuffServer) {
 		defer ctx.Release()
 		impl.SendRequest(ctx, req)
 	})
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ emptypb.Empty
-
-// NewView is a quorum call invoked on all nodes in configuration c,
-// with the same argument in, and returns a combined result.
-func (n *Node) NewView(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
-	cd := gorums.CallData{
-		Message: in,
-		Method:  "basichotstuffpb.BasicHotStuff.NewView",
-	}
-
-	n.RawNode.Unicast(ctx, cd, opts...)
+	srv.RegisterHandler("basichotstuffpb.BasicHotStuff.WishNextView", func(ctx gorums.ServerCtx, in *gorums.Message, _ chan<- *gorums.Message) {
+		req := in.Message.(*Msg)
+		defer ctx.Release()
+		impl.WishNextView(ctx, req)
+	})
+	srv.RegisterHandler("basichotstuffpb.BasicHotStuff.Timeout", func(ctx gorums.ServerCtx, in *gorums.Message, _ chan<- *gorums.Message) {
+		req := in.Message.(*Msg)
+		defer ctx.Release()
+		impl.Timeout(ctx, req)
+	})
+	srv.RegisterHandler("basichotstuffpb.BasicHotStuff.TimeoutVote", func(ctx gorums.ServerCtx, in *gorums.Message, _ chan<- *gorums.Message) {
+		req := in.Message.(*Msg)
+		defer ctx.Release()
+		impl.TimeoutVote(ctx, req)
+	})
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -357,6 +392,34 @@ func (n *Node) CommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOptio
 	cd := gorums.CallData{
 		Message: in,
 		Method:  "basichotstuffpb.BasicHotStuff.CommitVote",
+	}
+
+	n.RawNode.Unicast(ctx, cd, opts...)
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// WishNextView is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (n *Node) WishNextView(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.CallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.WishNextView",
+	}
+
+	n.RawNode.Unicast(ctx, cd, opts...)
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// TimeoutVote is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (n *Node) TimeoutVote(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.CallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.TimeoutVote",
 	}
 
 	n.RawNode.Unicast(ctx, cd, opts...)
