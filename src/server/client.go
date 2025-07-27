@@ -6,7 +6,8 @@ import (
 	"github.com/relab/gorums"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"hxy352/src/consensus"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"hxy352/src/crypto"
 	"hxy352/src/log"
 	"hxy352/src/model"
@@ -14,13 +15,14 @@ import (
 	"hxy352/src/proto/clientpb"
 	"hxy352/src/service"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"time"
 )
 
 type ClientImpl struct {
-	Consensus      *consensus.BasicHotStuff
+	//Consensus      *consensus.BasicHotStuff
 	Chan           chan bool
 	conf           *model.Config
 	nodes          []*basichotstuffpb.Node
@@ -30,6 +32,8 @@ type ClientImpl struct {
 	mutex   sync.Mutex
 	resMap  map[string][]string
 	doneMap map[string]struct{}
+
+	metric *service.MetricService
 }
 
 func NewClientImpl(conf *model.Config) *ClientImpl {
@@ -39,6 +43,8 @@ func NewClientImpl(conf *model.Config) *ClientImpl {
 		doneMap: make(map[string]struct{}),
 		conf:    conf,
 		timeout: service.NewTimeoutService(1 * time.Second),
+
+		metric: service.NewMetricService(conf),
 	}
 	c.initClient()
 	c.timeout.Reset()
@@ -64,7 +70,14 @@ func (s *ClientImpl) SendResponse(ctx gorums.ServerCtx, res *clientpb.Response) 
 	} else {
 		v = append(v, res.GetResult())
 
-		if len(v) < crypto.FaultSize+1 {
+		var f int
+		if s.conf.FaultNumber == 0 {
+			f = crypto.FaultSize
+		} else {
+			f = s.conf.FaultNumber
+		}
+
+		if len(v) < f+1 {
 			// continue waiting response from replicas
 			s.resMap[res.Cmd] = v
 		} else {
@@ -94,6 +107,7 @@ func (s *ClientImpl) WaitForServerReady() {
 
 func (s *ClientImpl) initClient() {
 	mgr := basichotstuffpb.NewManager(
+		gorums.WithSendBufferSize(1000),
 		gorums.WithGrpcDialOptions(
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		),
@@ -102,7 +116,16 @@ func (s *ClientImpl) initClient() {
 
 	var addrs []string
 
-	for _, rep := range s.conf.Replica[0:s.conf.ReplicaNumber] {
+	var totalSize int
+	if s.conf.FaultNumber == 0 {
+		totalSize = 3*crypto.FaultSize + 1
+	} else {
+		totalSize = 3*s.conf.FaultNumber + 1
+	}
+
+	log.Infof("Total nodes size: %d", totalSize)
+
+	for _, rep := range s.conf.Replica[0:totalSize] {
 		addrs = append(addrs, fmt.Sprintf("%s:%d", rep.Host, rep.Port))
 	}
 
@@ -127,12 +150,21 @@ func (s *ClientImpl) SendRequests() {
 	i := 1
 
 	for {
+
+		if i > 20 {
+			// wait for metric file finished
+			time.Sleep(1 * time.Second)
+			os.Exit(0)
+		}
+
+		requestTime := time.Now()
+
 		req := &basichotstuffpb.Request{
 			Cmd: strconv.Itoa(i),
 		}
 
 		s.allNodesConfig.SendRequest(context.Background(), req)
-		log.Infof("Sending request to %v: %s", s.nodes[i%s.conf.ReplicaNumber].Address(), req.String())
+		log.Infof("Sending request to %s", req.String())
 		s.timeout.SoftStart()
 
 		select {
@@ -140,10 +172,21 @@ func (s *ClientImpl) SendRequests() {
 			s.timeout.Stop()
 			i++
 
+			rt := time.Since(requestTime)
+			go s.metric.Put(model.MetricChanInfo{
+				TraceId:     req.Cmd,
+				PayloadSize: getRequestSize(req),
+				Duration:    rt,
+			})
 			continue
 		case <-s.timeout.Timeout():
 			log.Warnf("Timeout received, resend cmd %s !!!", req.Cmd)
 			s.timeout.Stop()
 		}
 	}
+}
+
+func getRequestSize(msg *basichotstuffpb.Request) int {
+	data, _ := proto.Marshal(msg)
+	return len(data)
 }

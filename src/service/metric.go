@@ -5,32 +5,31 @@ import (
 	"fmt"
 	"hxy352/src/log"
 	"hxy352/src/model"
-	"hxy352/src/types"
 	"os"
 	"path/filepath"
 	"strconv"
-	"time"
 )
 
 type MetricService struct {
-	conf   *model.ReplicaConf
+	//conf   *model.ReplicaConf
 	gConf  *model.Config
 	Chan   chan model.MetricChanInfo
-	tmpMap map[types.Hash]model.MetricChanInfo
-	index  int
+	tmpMap map[string]model.MetricChanInfo
+	//index  int
 	writer *csv.Writer
 }
 
-func NewMetricService(conf *model.ReplicaConf, gConf *model.Config) *MetricService {
+func NewMetricService(gConf *model.Config) *MetricService {
 	m := &MetricService{
-		conf:   conf,
+		//conf:   conf,
 		gConf:  gConf,
 		Chan:   make(chan model.MetricChanInfo, 1000),
-		tmpMap: make(map[types.Hash]model.MetricChanInfo),
+		tmpMap: make(map[string]model.MetricChanInfo),
 	}
 
-	filename := filepath.Join(gConf.FilePath["files"], fmt.Sprintf("metric_%d.csv", conf.Id))
+	filename := filepath.Join(gConf.FilePath["files"], fmt.Sprintf("metric_with_%d_fault.csv", gConf.FaultNumber))
 	m.InitCsv(filename)
+	go m.Handle()
 	return m
 }
 
@@ -44,19 +43,10 @@ func (m *MetricService) Handle() {
 		select {
 		case info := <-m.Chan:
 
-			if v, ok := m.tmpMap[info.Hash]; ok {
-				// update time
-				v.CommitTime = info.CommitTime
+			log.Infof("get metric info: %v", info)
 
-				// write to csv
-				// todo: temp comment
-				// m.WriteToCSV(v)
+			m.WriteToCSV(info)
 
-				delete(m.tmpMap, info.Hash)
-
-			} else {
-				m.tmpMap[info.Hash] = info
-			}
 		}
 	}
 }
@@ -64,31 +54,48 @@ func (m *MetricService) Handle() {
 // InitCsv 初始化 CSV 文件（只需调用一次）
 func (m *MetricService) InitCsv(filename string) {
 	var err error
+	var rawFile *os.File
 
-	rawFile, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		panic(err)
-	}
-	m.writer = csv.NewWriter(rawFile)
+	if fileExists(filename) {
+		log.Debug("文件存在")
 
-	// 写 CSV 表头
-	err = m.writer.Write([]string{"index", "hash", "view", "propose_time", "commit_time", "latency_ms"})
-	if err != nil {
-		panic(err)
+		rawFile, err = os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+		if err != nil {
+			panic(err)
+		}
+
+		m.writer = csv.NewWriter(rawFile)
+
+	} else {
+		log.Debug("文件不存在")
+
+		rawFile, err = os.Create(filename)
+
+		if err != nil {
+			panic(err)
+		}
+
+		m.writer = csv.NewWriter(rawFile)
+
+		// 写 CSV 表头
+
+		err = m.writer.Write([]string{"payload", "latency_ms"})
+		if err != nil {
+			panic(err)
+		}
+		m.writer.Flush()
 	}
-	m.writer.Flush()
+
 }
 
 func (m *MetricService) WriteToCSV(info model.MetricChanInfo) {
 
-	latency := info.CommitTime.Sub(*info.ProposeTime).Seconds() * 1000
+	latency := info.Duration.Seconds() * 1000
 
 	record := []string{
-		strconv.Itoa(m.index),
-		info.Hash.String()[0:8],
-		strconv.FormatUint(uint64(info.View), 10),
-		info.ProposeTime.Format(time.RFC3339),
-		info.CommitTime.Format(time.RFC3339),
+		//info.TraceId,
+		strconv.Itoa(info.PayloadSize),
 		fmt.Sprintf("%.3f", latency),
 	}
 
@@ -98,5 +105,10 @@ func (m *MetricService) WriteToCSV(info model.MetricChanInfo) {
 	}
 	m.writer.Flush()
 
-	m.index += 1
+	//m.index += 1
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil || !os.IsNotExist(err)
 }

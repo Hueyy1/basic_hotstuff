@@ -17,7 +17,8 @@ var hsAnnotations = map[string]string{"app": "hotstuff", "isGraceful": "true"}
 
 func newBasicHotStuffServiceCmd() *cobra.Command {
 	var id int
-	var replicaNumber int
+	//var replicaNumber int
+	var faultNumber int
 
 	cmd := &cobra.Command{
 		Use:         "bhs",
@@ -26,7 +27,8 @@ func newBasicHotStuffServiceCmd() *cobra.Command {
 		Annotations: hsAnnotations,
 	}
 	cmd.Flags().IntVarP(&id, "id", "i", 0, "id of the replica, start from 0")
-	cmd.Flags().IntVarP(&replicaNumber, "replica_number", "r", 4, "replica_number, start from 4 to 10")
+	//cmd.Flags().IntVarP(&replicaNumber, "replica_number", "r", 4, "replica_number, start from 4 to 10")
+	cmd.Flags().IntVarP(&faultNumber, "fault_number", "f", 0, "fault_number, start from 0 to 5")
 	return cmd
 }
 
@@ -40,8 +42,8 @@ func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
 	id, _ := cmd.Flags().GetInt("id")
 	gCfg.Id = types.ID(id)
 
-	replicaNumber, _ := cmd.Flags().GetInt("replica_number")
-	gCfg.ReplicaNumber = replicaNumber
+	faultNumber, _ := cmd.Flags().GetInt("fault_number")
+	gCfg.FaultNumber = faultNumber
 
 	//if id == 0 {
 	//	go func() {

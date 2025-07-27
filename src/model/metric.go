@@ -10,4 +10,8 @@ type MetricChanInfo struct {
 	View        types.View
 	ProposeTime *time.Time
 	CommitTime  *time.Time
+
+	TraceId     string
+	PayloadSize int
+	Duration    time.Duration
 }

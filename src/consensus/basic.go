@@ -63,17 +63,18 @@ type BasicHotStuff struct {
 	onceClient  sync.Once
 
 	// metric
-	metric *service.MetricService
+	//metric *service.MetricService
 }
 
 func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStuff {
 	bc := service.NewBlockChain()
 
 	cry := crypto.CryptoImpl{
+		GConf:      gConf,
 		Conf:       conf,
 		CryptoBase: ecdsa.New(conf, gConf),
 	}
-	cry.SetN_And_F(gConf.ReplicaNumber)
+	cry.Set_Normal_And_Fault_Size(gConf.FaultNumber)
 
 	hs := &BasicHotStuff{
 		Conf:       conf,
@@ -109,7 +110,7 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		onceReplica: sync.Once{},
 		onceClient:  sync.Once{},
 
-		metric: service.NewMetricService(conf, gConf),
+		//metric: service.NewMetricService(conf, gConf),
 	}
 	var err error
 	hs.HighQC, err = hs.crypto.CreateQuorumCert(model.GetGenesis(), []types.PartialCert{})
@@ -126,7 +127,7 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 		}
 	}()
 
-	go hs.metric.Handle()
+	//go hs.metric.Handle()
 
 	return hs
 }
@@ -315,7 +316,7 @@ func (hs *BasicHotStuff) InitAllReplicaClients() {
 	)
 
 	var adds []string
-	for _, config := range hs.gConf.Replica[0:hs.gConf.ReplicaNumber] {
+	for _, config := range hs.gConf.Replica[0 : crypto.FaultSize+crypto.QuorumSize] {
 		if types.ID(config.Id) == hs.Conf.Id {
 			// Skip myself
 			continue
@@ -372,7 +373,8 @@ func (hs *BasicHotStuff) GetClient() *clientpb.Node {
 }
 
 func (hs *BasicHotStuff) GetLeader() types.ID {
-	return types.ID(hs.CurrentView % 4)
+	totalSize := crypto.FaultSize + crypto.QuorumSize
+	return types.ID(int(hs.CurrentView) % totalSize)
 }
 
 // CreateLeaf is called to create a new leaf block.
@@ -440,13 +442,13 @@ func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
 	}
 
 	// metric
-	p := time.Now()
-	go hs.metric.Put(model.MetricChanInfo{
-		Hash:        block.Hash(),
-		View:        hs.CurrentView,
-		ProposeTime: &p,
-		CommitTime:  nil,
-	})
+	//p := time.Now()
+	//go hs.metric.Put(model.MetricChanInfo{
+	//	Hash:        block.Hash(),
+	//	View:        hs.CurrentView,
+	//	ProposeTime: &p,
+	//	CommitTime:  nil,
+	//})
 
 	hs.timeout.SoftStart()
 
@@ -466,13 +468,13 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 	block := basichotstuffpb.BlockFromProto(pbBlock)
 
 	// metric
-	p := time.Now()
-	go hs.metric.Put(model.MetricChanInfo{
-		Hash:        block.Hash(),
-		View:        hs.CurrentView,
-		ProposeTime: &p,
-		CommitTime:  nil,
-	})
+	//p := time.Now()
+	//go hs.metric.Put(model.MetricChanInfo{
+	//	Hash:        block.Hash(),
+	//	View:        hs.CurrentView,
+	//	ProposeTime: &p,
+	//	CommitTime:  nil,
+	//})
 
 	qcPb := msg.GetQC()
 	if qcPb == nil {
@@ -508,6 +510,10 @@ func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
 
 	// Send prepare vote
 	pCert := basichotstuffpb.PartialCertToProto(pc)
+
+	if crypto.IsFaultNode {
+		pCert = nil
+	}
 
 	prepareVote := &basichotstuffpb.Msg{
 		Type:        commonpb.MessageType_PrepareVote,
@@ -668,8 +674,12 @@ func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 		return
 	}
 
-	// Send preCommit vote
 	pCert := basichotstuffpb.PartialCertToProto(pc)
+
+	// Send preCommit vote
+	if crypto.IsFaultNode {
+		pCert = nil
+	}
 
 	preCommitVote := &basichotstuffpb.Msg{
 		Type:        commonpb.MessageType_PreCommitVote,
@@ -836,6 +846,10 @@ func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
 	// Send preCommit vote
 	pCert := basichotstuffpb.PartialCertToProto(pc)
 
+	if crypto.IsFaultNode {
+		pCert = nil
+	}
+
 	commitVote := &basichotstuffpb.Msg{
 		Type:        commonpb.MessageType_CommitVote,
 		View:        uint64(hs.CurrentView),
@@ -955,13 +969,13 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveCommitVote: exec cmd: %s %s", msg.GetBlock().Hash, block.Command())
 
 	// metric
-	p := time.Now()
-	go hs.metric.Put(model.MetricChanInfo{
-		Hash:        hs.CurrentBlock.Hash(),
-		View:        hs.CurrentView,
-		ProposeTime: nil,
-		CommitTime:  &p,
-	})
+	//p := time.Now()
+	//go hs.metric.Put(model.MetricChanInfo{
+	//	Hash:        hs.CurrentBlock.Hash(),
+	//	View:        hs.CurrentView,
+	//	ProposeTime: nil,
+	//	CommitTime:  &p,
+	//})
 
 	// view number + 1
 	hs.CurrentView += 1
@@ -1032,13 +1046,13 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	hs.BlockChain.Clean(block)
 
 	// metric
-	p := time.Now()
-	go hs.metric.Put(model.MetricChanInfo{
-		Hash:        block.Hash(),
-		View:        hs.CurrentView,
-		ProposeTime: nil,
-		CommitTime:  &p,
-	})
+	//p := time.Now()
+	//go hs.metric.Put(model.MetricChanInfo{
+	//	Hash:        block.Hash(),
+	//	View:        hs.CurrentView,
+	//	ProposeTime: nil,
+	//	CommitTime:  &p,
+	//})
 
 	hs.mut.Lock()
 	defer hs.mut.Unlock()

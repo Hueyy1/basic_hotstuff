@@ -47,19 +47,56 @@ func hotstuffQuorum(n int) (maxFaulty int, minCorrect int, err error) {
 	return maxFaulty, minCorrect, nil
 }
 
+// QuorumSize 2f + 1, default = 3
 var QuorumSize = 3
+
+// FaultSize f, default = 1
 var FaultSize = 1
+
+// real fault node, default = 0
+// gConf.FaultNumber
+var IsFaultNode = false
 
 type CryptoImpl struct {
 	//Bc   model.BlockChain
-	gConf *model.Config
+	GConf *model.Config
 	Conf  *model.ReplicaConf
 
 	CryptoBase
 }
 
-func (c *CryptoImpl) SetN_And_F(n int) {
-	FaultSize, QuorumSize, _ = hotstuffQuorum(n)
+func (c CryptoImpl) Set_Normal_And_Fault_Size(f int) {
+
+	if f == 0 {
+		return
+	}
+
+	FaultSize = f
+	QuorumSize = 2*f + 1
+
+	c.Set_Fault_Nodes()
+
+	return
+}
+
+// Set_Fault_Nodes return nodes which should perform fault
+func (c CryptoImpl) Set_Fault_Nodes() []types.ID {
+	if c.GConf.FaultNumber == 0 {
+		return []types.ID{}
+	}
+
+	// F    1/2/3/ 4/ 5
+	// node 3/6/9/12/15
+	res := make([]types.ID, 0, c.GConf.FaultNumber)
+	for i := 0; i < c.GConf.FaultNumber; i++ {
+		tmp := types.ID(i*3 + 3)
+		res = append(res, tmp)
+
+		if tmp == c.Conf.Id {
+			IsFaultNode = true
+		}
+	}
+	return res
 }
 
 // New returns a new implementation of the Crypto interface. It will use the given CryptoBase to create and verify
