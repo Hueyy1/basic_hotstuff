@@ -1246,8 +1246,7 @@ func (hs *BasicHotStuff) OnReceiveTimeoutVote(msg *basichotstuffpb.Msg) {
 		return
 	}
 
-	qc, err := hs.crypto.CreateTimeoutQuorumCert(tv, hs.verifiedTimeoutVotes[newView])
-	log.Infof("OnReceiveTimeout: err: %v, qc: %+v", err, qc.Signature())
+	qc, _ := hs.crypto.CreateTimeoutQuorumCert(tv, hs.verifiedTimeoutVotes[newView])
 	hs.processNewView(msg, qc)
 
 	delete(hs.verifiedTimeoutVotes, newView)

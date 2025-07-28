@@ -153,16 +153,16 @@ def stop(FaultNum: int = 0):
 
 
 if __name__ == '__main__':
-    # build()
+    build()
 
     # FaultNum = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
-    # for FaultNum in range(5, 6):
-    #
-    #     for i in range(3):
-    #         print(f"start fault {FaultNum} {i + 1} times")
-    #         run(FaultNum)
+    for FaultNum in range(0, 6):
 
-    stop(5)
+        for i in range(10):
+            print(f"start fault {FaultNum} {i + 1} times")
+            run(FaultNum)
+
+    # stop(5)
 
     # run(3)
