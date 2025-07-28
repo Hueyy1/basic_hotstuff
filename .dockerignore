@@ -359,6 +359,7 @@ $RECYCLE.BIN/
 */settings/*.key
 */temp/*
 */files/*
+*/logs/*
 */configs/config-map.yaml
 */configs/config-map-docker.yaml
 */configs/config-log.yaml

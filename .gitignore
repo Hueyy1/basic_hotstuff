@@ -404,3 +404,4 @@ configs/*.csr
 configs/*.key
 
 files
+logs

@@ -59,8 +59,8 @@ func (c *CogsWorthPacemaker) OnBeat() {
 
 func (c *CogsWorthPacemaker) WishToAdvance() {
 	// todo: timeout * 2
-	c.timeout = service.NewTimeoutService(2 * c.timeout.Duration())
-	//c.timeout.Reset()
+	//c.timeout = service.NewTimeoutService(2 * c.timeout.Duration())
+	c.timeout.Reset()
 	c.timeout.Stop()
 
 	// todo: if need create empty block???

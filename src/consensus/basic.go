@@ -17,7 +17,6 @@ import (
 	"hxy352/src/types"
 	"net"
 	"sync"
-	"time"
 )
 
 type BasicHotStuff struct {
@@ -56,7 +55,9 @@ type BasicHotStuff struct {
 
 	highQCTmp map[types.View][]types.QuorumCert
 
-	wishNextViewTmp map[types.View][]types.QuorumSignature
+	wishNextViewTmp        map[types.View][]types.QuorumSignature
+	wishFinishedTmp        map[types.View]bool
+	timeoutVoteFinishedTmp map[types.View]bool
 
 	onceReplica sync.Once
 	onceClient  sync.Once
@@ -105,7 +106,9 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 
 		highQCTmp: make(map[types.View][]types.QuorumCert),
 
-		wishNextViewTmp: make(map[types.View][]types.QuorumSignature),
+		wishNextViewTmp:        make(map[types.View][]types.QuorumSignature),
+		wishFinishedTmp:        make(map[types.View]bool),
+		timeoutVoteFinishedTmp: make(map[types.View]bool),
 
 		finishedViewChange: make(map[types.View]bool),
 
@@ -165,6 +168,17 @@ func (hs *BasicHotStuff) HandleMsg() {
 			hs.ProcessCurrentViewQueue(cView)
 
 			switch msg.Type {
+			case commonpb.MessageType_WishNextView:
+				hs.OnReceiveWishNextView(msg)
+
+			case commonpb.MessageType_Timeout:
+				hs.OnReceiveTimeout(msg)
+
+			case commonpb.MessageType_TimeoutVote:
+				hs.OnReceiveTimeoutVote(msg)
+
+			case commonpb.MessageType_NewView:
+				hs.OnReceiveNewView(msg)
 
 			case commonpb.MessageType_Prepare:
 				hs.OnReceivePrepare(msg)
@@ -186,12 +200,6 @@ func (hs *BasicHotStuff) HandleMsg() {
 
 			case commonpb.MessageType_Decide:
 				hs.OnReceiveDecide(msg)
-
-			case commonpb.MessageType_WishNextView:
-				hs.OnReceiveWishNextView(msg)
-
-			case commonpb.MessageType_NewView:
-				hs.OnReceiveNewView(msg)
 
 			}
 
@@ -896,8 +904,8 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 
 	log.Debugf("OnReceiveCommitVote: Vote PC verified: %.8s", pc.BlockHash())
 
-	hs.mut.Lock()
-	defer hs.mut.Unlock()
+	//hs.mut.Lock()
+	//defer hs.mut.Unlock()
 
 	hs.CurrentBlock = block
 
@@ -957,8 +965,8 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	//	CommitTime:  &p,
 	//})
 
-	// view number + 1
-	hs.CurrentView += 1
+	//// view number + 1
+	//hs.CurrentView += 1
 
 	// reset currentBlock
 	cmd := string(hs.CurrentBlock.Command())
@@ -967,7 +975,7 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 
 	// 不触发超时，直接进入new view
 	hs.HighQC = qc
-	hs.PaceMaker.Ready <- struct{}{}
+	//hs.PaceMaker.Ready <- struct{}{}
 
 	//hs.mut.Unlock()
 
@@ -981,6 +989,8 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	hs.SendResponse(cmd)
 
 	hs.PaceMaker.timeout.Stop()
+
+	hs.PaceMaker.WishToAdvance()
 
 }
 
@@ -1039,11 +1049,10 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	//})
 
 	hs.mut.Lock()
-	defer hs.mut.Unlock()
 
-	// view number + 1
-	hs.CurrentView = types.View(msg.View + 1)
-	log.Infof("OnReceiveDecide: set new view %d", hs.CurrentView)
+	//// view number + 1
+	//hs.CurrentView = types.View(msg.View + 1)
+	//log.Infof("OnReceiveDecide: set new view %d", hs.CurrentView)
 
 	// reset block
 	cmd := string(block.Command())
@@ -1058,15 +1067,17 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	hs.HighQC = qc
 	hs.CommitQC = qc
 
-	hs.PaceMaker.Ready <- struct{}{}
-
-	// send new view to next leader
-	//hs.SendNewView()
+	//hs.PaceMaker.Ready <- struct{}{}
 
 	// send response
 	hs.SendResponse(cmd)
 
 	hs.PaceMaker.timeout.Stop()
+
+	hs.mut.Unlock()
+
+	// send wish to next leader
+	hs.PaceMaker.WishToAdvance()
 
 }
 
@@ -1091,9 +1102,16 @@ func (hs *BasicHotStuff) OnReceiveWishNextView(msg *basichotstuffpb.Msg) {
 	//hs.mut.Lock()
 	//defer hs.mut.Unlock()
 
+	newView := types.View(msg.GetView())
+
 	log.Infof("OnReceiveWishNextView: view:%d", msg.GetView())
 
-	newView := types.View(msg.GetView())
+	if hs.wishFinishedTmp[newView] {
+		log.Warnf("OnReceiveWishNextView: view:%d, wish finished , ignore", msg.GetView())
+		return
+	}
+
+	hs.PaceMaker.timeout.SoftStart()
 
 	sig := basichotstuffpb.QuorumSignatureFromProto(msg.GetViewSig())
 
@@ -1129,8 +1147,23 @@ func (hs *BasicHotStuff) OnReceiveWishNextView(msg *basichotstuffpb.Msg) {
 	hs.NodesCfg.Timeout(context.Background(), timeoutMsg)
 	log.Infof("OnReceiveWishNextView: send timeout(%d) msg ", newView)
 
+	// clean wishes
+	delete(hs.wishNextViewTmp, newView)
+	hs.wishFinishedTmp[newView] = true
+
 	// vote myself
-	hs.OnReceiveTimeoutVote(timeoutMsg)
+	tv := types.NewTimeoutVote(newView, cert)
+	sigVote, _ := hs.crypto.CreateTimeoutVoteCert(tv)
+	hs.OnReceiveTimeoutVote(&basichotstuffpb.Msg{
+		Type:      commonpb.MessageType_TimeoutVote,
+		View:      msg.GetView(),
+		ReplicaId: uint32(hs.Conf.Id),
+		ViewSig:   basichotstuffpb.QuorumSignatureToProto(sigVote),
+		TC:        timeoutMsg.TC,
+
+		// todo: 此处为QC？？
+		QC: basichotstuffpb.QuorumCertToProto(hs.PrepareQC),
+	})
 
 }
 
@@ -1174,13 +1207,21 @@ func (hs *BasicHotStuff) OnReceiveTimeoutVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveTimeoutVote: view:%d", msg.GetView())
 
 	if msg.GetType() != commonpb.MessageType_TimeoutVote {
+		log.Warnf("OnReceiveTimeoutVote: view:%s, wrong type ", msg.GetType())
+		return
+	}
+
+	newView := types.View(msg.GetView())
+
+	if hs.timeoutVoteFinishedTmp[newView] != true {
+		hs.PaceMaker.timeout.SoftStart()
+	} else {
+		log.Warnf("OnReceiveTimeoutVote: view:%s, vote finished, ingore ", msg.GetType())
 		return
 	}
 
 	//hs.mut.Lock()
 	//defer hs.mut.Unlock()
-
-	newView := types.View(msg.GetView())
 
 	sig := basichotstuffpb.QuorumSignatureFromProto(msg.GetViewSig())
 
@@ -1205,8 +1246,11 @@ func (hs *BasicHotStuff) OnReceiveTimeoutVote(msg *basichotstuffpb.Msg) {
 		return
 	}
 
-	qc, _ := hs.crypto.CreateTimeoutQuorumCert(tv, hs.verifiedTimeoutVotes[newView])
+	qc, err := hs.crypto.CreateTimeoutQuorumCert(tv, hs.verifiedTimeoutVotes[newView])
+	log.Infof("OnReceiveTimeout: err: %v, qc: %+v", err, qc.Signature())
 	hs.processNewView(msg, qc)
+
+	delete(hs.verifiedTimeoutVotes, newView)
 }
 
 //func (hs *BasicHotStuff) SendNewView() {
@@ -1290,7 +1334,7 @@ func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
 	//	}
 	//}
 
-	log.Infof("OnReceiveNewView: receive new view: %d", msg.GetView())
+	log.Infof("OnReceiveNewView: receive new view: %d, msg: %+v", msg.GetView(), msg)
 
 	tv := types.NewTimeoutVote(types.View(msg.View), basichotstuffpb.TimeoutCertFromProto(msg.GetTC()))
 	qc := basichotstuffpb.QuorumCertFromProto(msg.GetQC())
@@ -1344,6 +1388,7 @@ func (hs *BasicHotStuff) processNewView(msg *basichotstuffpb.Msg, qc types.Quoru
 			View:      msg.GetView(),
 			QC:        basichotstuffpb.QuorumCertToProto(qc),
 			ReplicaId: uint32(hs.Conf.Id),
+			TC:        msg.GetTC(),
 
 			Block: basichotstuffpb.BlockToProto(block),
 		})
@@ -1380,6 +1425,10 @@ func (hs *BasicHotStuff) processNewView(msg *basichotstuffpb.Msg, qc types.Quoru
 
 	// 通知handleReq
 	hs.PaceMaker.Ready <- struct{}{}
+
+	hs.PaceMaker.timeout.Stop()
+
+	hs.timeoutVoteFinishedTmp[hs.CurrentView] = true
 
 	//// try to chase new msg
 	//cView := hs.CurrentView

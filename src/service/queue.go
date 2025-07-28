@@ -10,24 +10,30 @@ import (
 
 func msgPriority(msg *basichotstuffpb.Msg) int {
 	switch msg.Type {
-	case commonpb.MessageType_NewView:
+	case commonpb.MessageType_WishNextView:
 		return 0
-	case commonpb.MessageType_Prepare:
+	case commonpb.MessageType_Timeout:
 		return 1
-	case commonpb.MessageType_PrepareVote:
+	case commonpb.MessageType_TimeoutVote:
 		return 2
-	case commonpb.MessageType_PreCommit:
+	case commonpb.MessageType_NewView:
 		return 3
-	case commonpb.MessageType_PreCommitVote:
+	case commonpb.MessageType_Prepare:
 		return 4
-	case commonpb.MessageType_Commit:
+	case commonpb.MessageType_PrepareVote:
 		return 5
-	case commonpb.MessageType_CommitVote:
+	case commonpb.MessageType_PreCommit:
 		return 6
-	case commonpb.MessageType_Decide:
+	case commonpb.MessageType_PreCommitVote:
 		return 7
+	case commonpb.MessageType_Commit:
+		return 8
+	case commonpb.MessageType_CommitVote:
+		return 9
+	case commonpb.MessageType_Decide:
+		return 10
 	default:
-		return 100 // unknown or lowest
+		return 0 // unknown or lowest
 	}
 }
 
