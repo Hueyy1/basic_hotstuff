@@ -164,14 +164,17 @@ func (s *ClientImpl) SendRequests() {
 
 			rt := time.Since(requestTime)
 			go s.metric.Put(model.MetricChanInfo{
-				TraceId:     req.Cmd,
+				//TraceId:     req.Cmd,
 				PayloadSize: getRequestSize(req),
 				Duration:    rt,
 			})
 			continue
 		case <-s.timeout.Timeout():
-			log.Warnf("Timeout received, resend cmd %s !!!", req.Cmd)
+			log.Warnf("Timeout received, sleep 2s, resend cmd %s !!!", req.Cmd)
 			s.timeout.Stop()
+
+			time.Sleep(2 * time.Second)
+			//os.Exit(0)
 		}
 	}
 }
