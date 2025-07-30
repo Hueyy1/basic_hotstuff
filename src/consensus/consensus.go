@@ -74,6 +74,10 @@ type HotStuffImpl struct {
 	verifiedPreCommitVotes map[types.Hash][]types.PartialCert
 	verifiedCommitVotes    map[types.Hash][]types.PartialCert
 
+	finishedPrepareVotes   map[types.Hash]bool
+	finishedPreCommitVotes map[types.Hash]bool
+	finishedCommitVotes    map[types.Hash]bool
+
 	highQCTmp map[types.View][]types.QuorumCert
 }
 
@@ -102,6 +106,10 @@ func NewHotStuffImpl(conf *model.ReplicaConf, gConf *model.Config) *HotStuffImpl
 		verifiedPrepareVotes:   make(map[types.Hash][]types.PartialCert),
 		verifiedPreCommitVotes: make(map[types.Hash][]types.PartialCert),
 		verifiedCommitVotes:    make(map[types.Hash][]types.PartialCert),
+
+		finishedPrepareVotes:   make(map[types.Hash]bool),
+		finishedPreCommitVotes: make(map[types.Hash]bool),
+		finishedCommitVotes:    make(map[types.Hash]bool),
 
 		highQCTmp: make(map[types.View][]types.QuorumCert),
 
@@ -330,6 +338,11 @@ func (hs *HotStuffImpl) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 	pc := basichotstuffpb.PartialCertFromProto(pcPb)
 	block := basichotstuffpb.BlockFromProto(msg.GetBlock())
 
+	if hs.finishedPrepareVotes[pc.BlockHash()] {
+		log.Infof("OnReceivePrepareVote: view %d votes have finished, ignore", msg.GetView())
+		return
+	}
+
 	//if hs.CurrentBlock.Hash() != pc.BlockHash() {
 	//	log.Warnf("OnReceivePrepareVote: currentBlock.Hash() != pc.BlockHash(): %.8s.", pc.BlockHash())
 	//	return
@@ -378,6 +391,7 @@ func (hs *HotStuffImpl) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 
 	// clean votes after create QC
 	delete(hs.verifiedPrepareVotes, pc.BlockHash())
+	hs.finishedPrepareVotes[pc.BlockHash()] = true
 
 	// send pre-commit
 
@@ -456,7 +470,7 @@ func (hs *HotStuffImpl) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
 		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
-	//log.Debugf("leader node: %v", hs.GetLeaderNode())
+	log.Infof("leader node sent preCommitVote: %v, view:%d, id:%d", hs.GetLeaderNode(), preCommitVote.View, preCommitVote.ReplicaId)
 
 	hs.GetLeaderNode().PreCommitVote(context.Background(), preCommitVote)
 
@@ -488,6 +502,11 @@ func (hs *HotStuffImpl) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 	pc := basichotstuffpb.PartialCertFromProto(pcPb)
 	block := basichotstuffpb.BlockFromProto(msg.GetBlock())
 
+	if hs.finishedPreCommitVotes[pc.BlockHash()] {
+		log.Infof("OnReceivePreCommitVote: view %d votes have finished, ignore", msg.GetView())
+		return
+	}
+
 	if !hs.crypto.VerifyPartialCert(block, pc) {
 		log.Info("OnReceivePreCommitVote: Vote could not be verified!")
 		return
@@ -513,7 +532,7 @@ func (hs *HotStuffImpl) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 
 	qc, err := hs.crypto.CreateQuorumCert(hs.CurrentBlock, votes)
 	if err != nil {
-		log.Info("OnReceivePreCommitVote: could not create QC for block: ", err)
+		log.Errorf("OnReceivePreCommitVote: could not create QC for block: %v", err)
 		return
 	}
 
@@ -522,8 +541,9 @@ func (hs *HotStuffImpl) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
 
 	// clean votes after create QC
 	delete(hs.verifiedPreCommitVotes, pc.BlockHash())
+	hs.finishedPreCommitVotes[pc.BlockHash()] = true
 
-	// send pre-commit
+	// send commit
 
 	commitMsg := &basichotstuffpb.Msg{
 		Type:        commonpb.MessageType_Commit,

@@ -233,6 +233,11 @@ func (hs *BasicHotStuffWithCogsworth) OnReceiveCommitVote(msg *basichotstuffpb.M
 	pc := basichotstuffpb.PartialCertFromProto(pcPb)
 	block := basichotstuffpb.BlockFromProto(msg.GetBlock())
 
+	if hs.finishedCommitVotes[pc.BlockHash()] {
+		log.Infof("OnReceiveCommitVote: view %d votes have finished, ignore", msg.GetView())
+		return
+	}
+
 	if !hs.crypto.VerifyPartialCert(block, pc) {
 		log.Info("OnReceiveCommitVote: Vote could not be verified!")
 		return
@@ -269,6 +274,7 @@ func (hs *BasicHotStuffWithCogsworth) OnReceiveCommitVote(msg *basichotstuffpb.M
 
 	// clean votes after create QC
 	delete(hs.verifiedCommitVotes, pc.BlockHash())
+	hs.finishedCommitVotes[pc.BlockHash()] = true
 
 	// store block
 	hs.BlockChain.Store(block)
