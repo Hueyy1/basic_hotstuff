@@ -21,7 +21,7 @@ func NewCmdCache() *CmdCache {
 
 func (c *CmdCache) Enqueue(req *basichotstuffpb.Request) {
 	//c.queue.Enqueue(req)
-	log.Infof("Enqueue req: %+v", req)
+	log.Debugf("Enqueue req: %+v", req)
 	c.channel <- req
 }
 

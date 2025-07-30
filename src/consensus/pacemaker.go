@@ -2,30 +2,16 @@ package consensus
 
 import (
 	"hxy352/src/log"
-	"hxy352/src/service"
-	"time"
 )
 
 type CogsWorthPacemaker struct {
-	consensus *BasicHotStuff
-
-	Ready chan struct{}
-
-	timeout service.TimeoutService
+	consensus *BasicHotStuffWithCogsworth
 }
 
-func NewCogsWorthPacemaker(consensus *BasicHotStuff) *CogsWorthPacemaker {
+func NewCogsWorthPacemaker(consensus *BasicHotStuffWithCogsworth) *CogsWorthPacemaker {
 	c := &CogsWorthPacemaker{
 		consensus: consensus,
-		Ready:     make(chan struct{}),
-		timeout:   service.NewTimeoutService(1 * time.Second),
 	}
-
-	go func() {
-		if c.consensus.GetLeader() == c.consensus.Conf.Id {
-			c.Ready <- struct{}{}
-		}
-	}()
 
 	return c
 }
@@ -33,7 +19,7 @@ func NewCogsWorthPacemaker(consensus *BasicHotStuff) *CogsWorthPacemaker {
 func (c *CogsWorthPacemaker) OnBeat() {
 	for {
 		select {
-		case <-c.Ready:
+		case <-c.consensus.Ready:
 
 			for {
 
@@ -60,8 +46,8 @@ func (c *CogsWorthPacemaker) OnBeat() {
 func (c *CogsWorthPacemaker) WishToAdvance() {
 	// todo: timeout * 2
 	//c.timeout = service.NewTimeoutService(2 * c.timeout.Duration())
-	c.timeout.Reset()
-	c.timeout.Stop()
+	c.consensus.timeout.Reset()
+	c.consensus.timeout.Stop()
 
 	// todo: if need create empty block???
 	//hs.BlockChain.Store(hs.CreateLeaf(hs.CurrentBlock.Parent(), types.QuorumCert{}, ""))
@@ -77,5 +63,5 @@ func (c *CogsWorthPacemaker) WishToAdvance() {
 
 	c.consensus.mut.Unlock()
 
-	c.timeout.SoftStart()
+	c.consensus.timeout.SoftStart()
 }

@@ -1,4 +1,4 @@
-package crypto
+package ecdsa
 
 import (
 	"hxy352/src/types"
@@ -6,16 +6,16 @@ import (
 )
 
 // Signature is the individual component in MultiSignature
-type Signature interface {
+type mSignature interface {
 	Signer() types.ID
 	ToBytes() []byte
 }
 
 // Multi is a set of (partial) signatures.
-type Multi[T Signature] map[types.ID]T
+type Multi[T mSignature] map[types.ID]T
 
 // Restore should only be used to restore an existing threshold signature from a set of signatures.
-func Restore[T Signature](signatures []T) Multi[T] {
+func Restore[T mSignature](signatures []T) Multi[T] {
 	sig := make(Multi[T], len(signatures))
 	for _, s := range signatures {
 		sig[s.Signer()] = s

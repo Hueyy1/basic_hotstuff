@@ -2,7 +2,6 @@ package basichotstuffpb
 
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"hxy352/src/crypto"
 	"hxy352/src/crypto/ecdsa"
 	"hxy352/src/model"
 	"hxy352/src/types"
@@ -20,7 +19,7 @@ func QuorumSignatureFromProto(sig *QuorumSignature) types.QuorumSignature {
 			s.SetBytes(sig.GetS())
 			sigs[i] = ecdsa.RestoreSignature(r, s, types.ID(sig.GetSigner()))
 		}
-		return crypto.Restore(sigs)
+		return ecdsa.Restore(sigs)
 	}
 	return nil
 }
@@ -41,7 +40,7 @@ func QuorumSignatureToProto(sig types.QuorumSignature) *QuorumSignature {
 	}
 
 	sigs := make([]*ECDSASignature, 0, sig.Participants().Len())
-	for _, s := range sig.(crypto.Multi[*ecdsa.Signature]) {
+	for _, s := range sig.(ecdsa.Multi[*ecdsa.Signature]) {
 		sigs = append(sigs, &ECDSASignature{
 			Signer: uint32(s.Signer()),
 			R:      s.R().Bytes(),

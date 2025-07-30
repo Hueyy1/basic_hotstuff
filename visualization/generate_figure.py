@@ -62,9 +62,10 @@ def run():
     plt.xlabel("Fault Number")
     plt.ylabel("Average Latency (ms)")
     plt.title("Fault Number vs. Average Latency")
+    plt.xticks(faults)  # 强制使用整数刻度
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("faults_vs_latency.png")
+    plt.savefig("cogsworth_faults_vs_latency.png")
     plt.show()
 
     # throughput
@@ -73,9 +74,10 @@ def run():
     plt.xlabel("Fault Number")
     plt.ylabel("Throughput (byte/ms)")
     plt.title("Fault Number vs. Throughput")
+    plt.xticks(faults)  # 强制使用整数刻度
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("faults_vs_throughput.png")
+    plt.savefig("cogsworth_faults_vs_throughput.png")
     plt.show()
 
 

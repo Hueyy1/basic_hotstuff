@@ -7,7 +7,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
-	"hxy352/src/crypto"
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/proto/basichotstuffpb"
@@ -28,6 +27,8 @@ type ClientImpl struct {
 	allNodesConfig *basichotstuffpb.Configuration
 	timeout        service.TimeoutService
 
+	NodeManager *service.NodeManager
+
 	mutex   sync.Mutex
 	resMap  map[string][]string
 	doneMap map[string]struct{}
@@ -43,6 +44,8 @@ func NewClientImpl(conf *model.Config) *ClientImpl {
 		conf:    conf,
 		timeout: service.NewTimeoutService(1 * time.Second),
 
+		NodeManager: service.NewNodeManager(conf),
+
 		metric: service.NewMetricService(conf),
 	}
 	c.initClient()
@@ -56,10 +59,11 @@ func (s *ClientImpl) SendResponse(ctx gorums.ServerCtx, res *clientpb.Response) 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	log.Infof("Get Response: %+v", res)
+	cmdInt, _ := strconv.Atoi(res.Cmd)
+	log.Infof("Get Response cmd: %d", cmdInt)
 
 	if _, ok := s.doneMap[res.Cmd]; ok {
-		log.Infof("Done for Cmd: %s", res.Cmd)
+		log.Infof("Done for Cmd: %d", cmdInt)
 		return
 	}
 
@@ -69,14 +73,7 @@ func (s *ClientImpl) SendResponse(ctx gorums.ServerCtx, res *clientpb.Response) 
 	} else {
 		v = append(v, res.GetResult())
 
-		var f int
-		if s.conf.FaultNumber == 0 {
-			f = crypto.FaultSize
-		} else {
-			f = s.conf.FaultNumber
-		}
-
-		if len(v) < f+1 {
+		if len(v) < s.NodeManager.F+1 {
 			// continue waiting response from replicas
 			s.resMap[res.Cmd] = v
 		} else {
@@ -115,16 +112,9 @@ func (s *ClientImpl) initClient() {
 
 	var addrs []string
 
-	var totalSize int
-	if s.conf.FaultNumber == 0 {
-		totalSize = 3*crypto.FaultSize + 1
-	} else {
-		totalSize = 3*s.conf.FaultNumber + 1
-	}
+	log.Infof("Total nodes size: %d", s.NodeManager.TotalNodesNumber)
 
-	log.Infof("Total nodes size: %d", totalSize)
-
-	for _, rep := range s.conf.Replica[0:totalSize] {
+	for _, rep := range s.conf.Replica[0:s.NodeManager.TotalNodesNumber] {
 		addrs = append(addrs, fmt.Sprintf("%s:%d", rep.Host, rep.Port))
 	}
 
@@ -159,11 +149,12 @@ func (s *ClientImpl) SendRequests() {
 		requestTime := time.Now()
 
 		req := &basichotstuffpb.Request{
-			Cmd: strconv.Itoa(i),
+			//Cmd: strconv.Itoa(i),
+			Cmd: fmt.Sprintf("%0100d", i), // 定长100
 		}
 
 		s.allNodesConfig.SendRequest(context.Background(), req)
-		log.Infof("Sending request to %s", req.String())
+		log.Infof("Sending request %d", i)
 		s.timeout.SoftStart()
 
 		select {

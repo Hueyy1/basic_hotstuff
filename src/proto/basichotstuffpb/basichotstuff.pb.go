@@ -828,9 +828,10 @@ const file_proto_basichotstuffpb_basichotstuff_proto_rawDesc = "" +
 	"\x03Sig\x18\x01 \x01(\v2 .basichotstuffpb.QuorumSignatureR\x03Sig\x12\x12\n" +
 	"\x04View\x18\x02 \x01(\x04R\x04View\"7\n" +
 	"\bSyncInfo\x12+\n" +
-	"\x02QC\x18\x01 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC2\xa1\x06\n" +
+	"\x02QC\x18\x01 \x01(\v2\x1b.basichotstuffpb.QuorumCertR\x02QC2\xe5\x06\n" +
 	"\rBasicHotStuff\x12=\n" +
-	"\aNewView\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12=\n" +
+	"\aNewView\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12B\n" +
+	"\fNewViewBasic\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12=\n" +
 	"\aPrepare\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12A\n" +
 	"\vPrepareVote\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x90\xb5\x18\x01\x12?\n" +
 	"\tPreCommit\x12\x14.basichotstuffpb.Msg\x1a\x16.google.protobuf.Empty\"\x04\x98\xb5\x18\x01\x12C\n" +
@@ -893,31 +894,33 @@ var file_proto_basichotstuffpb_basichotstuff_proto_depIdxs = []int32{
 	8,  // 15: basichotstuffpb.TimeoutCert.Sig:type_name -> basichotstuffpb.QuorumSignature
 	9,  // 16: basichotstuffpb.SyncInfo.QC:type_name -> basichotstuffpb.QuorumCert
 	1,  // 17: basichotstuffpb.BasicHotStuff.NewView:input_type -> basichotstuffpb.Msg
-	1,  // 18: basichotstuffpb.BasicHotStuff.Prepare:input_type -> basichotstuffpb.Msg
-	1,  // 19: basichotstuffpb.BasicHotStuff.PrepareVote:input_type -> basichotstuffpb.Msg
-	1,  // 20: basichotstuffpb.BasicHotStuff.PreCommit:input_type -> basichotstuffpb.Msg
-	1,  // 21: basichotstuffpb.BasicHotStuff.PreCommitVote:input_type -> basichotstuffpb.Msg
-	1,  // 22: basichotstuffpb.BasicHotStuff.Commit:input_type -> basichotstuffpb.Msg
-	1,  // 23: basichotstuffpb.BasicHotStuff.CommitVote:input_type -> basichotstuffpb.Msg
-	1,  // 24: basichotstuffpb.BasicHotStuff.Decide:input_type -> basichotstuffpb.Msg
-	0,  // 25: basichotstuffpb.BasicHotStuff.SendRequest:input_type -> basichotstuffpb.Request
-	1,  // 26: basichotstuffpb.BasicHotStuff.WishNextView:input_type -> basichotstuffpb.Msg
-	1,  // 27: basichotstuffpb.BasicHotStuff.Timeout:input_type -> basichotstuffpb.Msg
-	1,  // 28: basichotstuffpb.BasicHotStuff.TimeoutVote:input_type -> basichotstuffpb.Msg
-	14, // 29: basichotstuffpb.BasicHotStuff.NewView:output_type -> google.protobuf.Empty
-	14, // 30: basichotstuffpb.BasicHotStuff.Prepare:output_type -> google.protobuf.Empty
-	14, // 31: basichotstuffpb.BasicHotStuff.PrepareVote:output_type -> google.protobuf.Empty
-	14, // 32: basichotstuffpb.BasicHotStuff.PreCommit:output_type -> google.protobuf.Empty
-	14, // 33: basichotstuffpb.BasicHotStuff.PreCommitVote:output_type -> google.protobuf.Empty
-	14, // 34: basichotstuffpb.BasicHotStuff.Commit:output_type -> google.protobuf.Empty
-	14, // 35: basichotstuffpb.BasicHotStuff.CommitVote:output_type -> google.protobuf.Empty
-	14, // 36: basichotstuffpb.BasicHotStuff.Decide:output_type -> google.protobuf.Empty
-	14, // 37: basichotstuffpb.BasicHotStuff.SendRequest:output_type -> google.protobuf.Empty
-	14, // 38: basichotstuffpb.BasicHotStuff.WishNextView:output_type -> google.protobuf.Empty
-	14, // 39: basichotstuffpb.BasicHotStuff.Timeout:output_type -> google.protobuf.Empty
-	14, // 40: basichotstuffpb.BasicHotStuff.TimeoutVote:output_type -> google.protobuf.Empty
-	29, // [29:41] is the sub-list for method output_type
-	17, // [17:29] is the sub-list for method input_type
+	1,  // 18: basichotstuffpb.BasicHotStuff.NewViewBasic:input_type -> basichotstuffpb.Msg
+	1,  // 19: basichotstuffpb.BasicHotStuff.Prepare:input_type -> basichotstuffpb.Msg
+	1,  // 20: basichotstuffpb.BasicHotStuff.PrepareVote:input_type -> basichotstuffpb.Msg
+	1,  // 21: basichotstuffpb.BasicHotStuff.PreCommit:input_type -> basichotstuffpb.Msg
+	1,  // 22: basichotstuffpb.BasicHotStuff.PreCommitVote:input_type -> basichotstuffpb.Msg
+	1,  // 23: basichotstuffpb.BasicHotStuff.Commit:input_type -> basichotstuffpb.Msg
+	1,  // 24: basichotstuffpb.BasicHotStuff.CommitVote:input_type -> basichotstuffpb.Msg
+	1,  // 25: basichotstuffpb.BasicHotStuff.Decide:input_type -> basichotstuffpb.Msg
+	0,  // 26: basichotstuffpb.BasicHotStuff.SendRequest:input_type -> basichotstuffpb.Request
+	1,  // 27: basichotstuffpb.BasicHotStuff.WishNextView:input_type -> basichotstuffpb.Msg
+	1,  // 28: basichotstuffpb.BasicHotStuff.Timeout:input_type -> basichotstuffpb.Msg
+	1,  // 29: basichotstuffpb.BasicHotStuff.TimeoutVote:input_type -> basichotstuffpb.Msg
+	14, // 30: basichotstuffpb.BasicHotStuff.NewView:output_type -> google.protobuf.Empty
+	14, // 31: basichotstuffpb.BasicHotStuff.NewViewBasic:output_type -> google.protobuf.Empty
+	14, // 32: basichotstuffpb.BasicHotStuff.Prepare:output_type -> google.protobuf.Empty
+	14, // 33: basichotstuffpb.BasicHotStuff.PrepareVote:output_type -> google.protobuf.Empty
+	14, // 34: basichotstuffpb.BasicHotStuff.PreCommit:output_type -> google.protobuf.Empty
+	14, // 35: basichotstuffpb.BasicHotStuff.PreCommitVote:output_type -> google.protobuf.Empty
+	14, // 36: basichotstuffpb.BasicHotStuff.Commit:output_type -> google.protobuf.Empty
+	14, // 37: basichotstuffpb.BasicHotStuff.CommitVote:output_type -> google.protobuf.Empty
+	14, // 38: basichotstuffpb.BasicHotStuff.Decide:output_type -> google.protobuf.Empty
+	14, // 39: basichotstuffpb.BasicHotStuff.SendRequest:output_type -> google.protobuf.Empty
+	14, // 40: basichotstuffpb.BasicHotStuff.WishNextView:output_type -> google.protobuf.Empty
+	14, // 41: basichotstuffpb.BasicHotStuff.Timeout:output_type -> google.protobuf.Empty
+	14, // 42: basichotstuffpb.BasicHotStuff.TimeoutVote:output_type -> google.protobuf.Empty
+	30, // [30:43] is the sub-list for method output_type
+	17, // [17:30] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name
 	17, // [17:17] is the sub-list for extension extendee
 	0,  // [0:17] is the sub-list for field type_name

@@ -10,7 +10,6 @@ import (
 	"hxy352/src/server"
 	"hxy352/src/types"
 	"net"
-	"time"
 	//_ "net/http/pprof"
 )
 
@@ -18,8 +17,9 @@ var hsAnnotations = map[string]string{"app": "hotstuff", "isGraceful": "true"}
 
 func newBasicHotStuffServiceCmd() *cobra.Command {
 	var id int
-	//var replicaNumber int
 	var faultNumber int
+	var totalNumber int
+	var pacemakerLoaded bool
 
 	cmd := &cobra.Command{
 		Use:         "bhs",
@@ -28,8 +28,9 @@ func newBasicHotStuffServiceCmd() *cobra.Command {
 		Annotations: hsAnnotations,
 	}
 	cmd.Flags().IntVarP(&id, "id", "i", 0, "id of the replica, start from 0")
-	//cmd.Flags().IntVarP(&replicaNumber, "replica_number", "r", 4, "replica_number, start from 4 to 10")
 	cmd.Flags().IntVarP(&faultNumber, "fault_number", "f", 0, "fault_number, start from 0 to 5")
+	cmd.Flags().IntVarP(&totalNumber, "total_number", "t", 4, "total_number, start from 4 to 16")
+	cmd.Flags().BoolVarP(&pacemakerLoaded, "pacemaker_loaded", "p", false, "pacemaker_loaded, true or false, default false")
 	return cmd
 }
 
@@ -43,9 +44,18 @@ func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
 	id, _ := cmd.Flags().GetInt("id")
 	gCfg.Id = types.ID(id)
 
-	faultNumber, _ := cmd.Flags().GetInt("fault_number")
-	gCfg.FaultNumber = faultNumber
+	gCfg.FaultNumber, _ = cmd.Flags().GetInt("fault_number")
+	gCfg.TotalNumber, _ = cmd.Flags().GetInt("total_number")
+	gCfg.PacemakerLoaded, _ = cmd.Flags().GetBool("pacemaker_loaded")
 
+	log.Infof(
+		"starting basic hotstuff service: fault_number=%d, total_number=%d, pacemaker_loaded=%v",
+		gCfg.FaultNumber,
+		gCfg.TotalNumber,
+		gCfg.PacemakerLoaded,
+	)
+
+	// for pprof
 	//if id == 0 {
 	//	go func() {
 	//		http.ListenAndServe("localhost:6060", nil)
@@ -71,15 +81,7 @@ func startBasicHotStuffService(cmd *cobra.Command, _ []string) (err error) {
 	srv := server.NewBasicHotStuffImpl(&currentReplica, &gCfg)
 	basichotstuffpb.RegisterBasicHotStuffServer(gorumsSrv, srv)
 
-	go srv.Consensus.HandleMsg()
-
-	go srv.Consensus.PaceMaker.OnBeat()
-
-	go func() {
-		cView := srv.Consensus.CurrentView
-		srv.Consensus.ProcessCurrentViewQueue(cView)
-		time.Sleep(10 * time.Millisecond)
-	}()
+	go srv.Consensus.Run()
 
 	gorumsSrv.Serve(lis)
 

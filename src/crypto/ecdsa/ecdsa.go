@@ -5,8 +5,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
-	"hxy352/src/crypto"
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/types"
@@ -21,9 +21,17 @@ const (
 )
 
 var (
-	_ types.QuorumSignature = (*crypto.Multi[*Signature])(nil)
-	_ types.IDSet           = (*crypto.Multi[*Signature])(nil)
-	_ crypto.Signature      = (*Signature)(nil)
+	_ types.QuorumSignature = (*Multi[*Signature])(nil)
+	_ types.IDSet           = (*Multi[*Signature])(nil)
+	_ mSignature            = (*Signature)(nil)
+)
+
+var (
+	// ErrCombineMultiple is used when Combine is called with less than two signatures.
+	ErrCombineMultiple = errors.New("must have at least two signatures")
+
+	// ErrCombineOverlap is used when Combine is called with signatures that have overlapping participation.
+	ErrCombineOverlap = errors.New("overlapping signatures")
 )
 
 // Signature is an ECDSA signature.
@@ -61,7 +69,7 @@ func (sig Signature) ToBytes() []byte {
 	return b
 }
 
-type ecdsaBase struct {
+type EcdsaBase struct {
 	//configuration modules.Configuration
 	//logger        logging.Logger
 	//opts          *modules.Options
@@ -71,22 +79,22 @@ type ecdsaBase struct {
 }
 
 // New returns a new instance of the ECDSA CryptoBase implementation.
-func New(conf *model.ReplicaConf, gConf *model.Config) crypto.CryptoBase {
-	return &ecdsaBase{gConf: gConf, conf: conf}
+func New(conf *model.ReplicaConf, gConf *model.Config) *EcdsaBase {
+	return &EcdsaBase{gConf: gConf, conf: conf}
 }
 
-func (ec *ecdsaBase) privateKey() *ecdsa.PrivateKey {
+func (ec *EcdsaBase) privateKey() *ecdsa.PrivateKey {
 	return ec.conf.PriKey.(*ecdsa.PrivateKey)
 }
 
 // Sign creates a cryptographic signature of the given message.
-func (ec *ecdsaBase) Sign(message []byte) (signature types.QuorumSignature, err error) {
+func (ec *EcdsaBase) Sign(message []byte) (signature types.QuorumSignature, err error) {
 	hash := sha256.Sum256(message)
 	r, s, err := ecdsa.Sign(rand.Reader, ec.privateKey(), hash[:])
 	if err != nil {
 		return nil, fmt.Errorf("ecdsa: sign failed: %w", err)
 	}
-	return crypto.Multi[*Signature]{ec.conf.Id: &Signature{
+	return Multi[*Signature]{ec.conf.Id: &Signature{
 		r:      r,
 		s:      s,
 		signer: ec.conf.Id,
@@ -94,17 +102,17 @@ func (ec *ecdsaBase) Sign(message []byte) (signature types.QuorumSignature, err 
 }
 
 // Combine combines multiple signatures into a single signature.
-func (ec *ecdsaBase) Combine(signatures ...types.QuorumSignature) (types.QuorumSignature, error) {
+func (ec *EcdsaBase) Combine(signatures ...types.QuorumSignature) (types.QuorumSignature, error) {
 	if len(signatures) < 2 {
-		return nil, crypto.ErrCombineMultiple
+		return nil, ErrCombineMultiple
 	}
 
-	ts := make(crypto.Multi[*Signature])
+	ts := make(Multi[*Signature])
 	for _, sig1 := range signatures {
-		if sig2, ok := sig1.(crypto.Multi[*Signature]); ok {
+		if sig2, ok := sig1.(Multi[*Signature]); ok {
 			for id, s := range sig2 {
 				if _, duplicate := ts[id]; duplicate {
-					return nil, crypto.ErrCombineOverlap
+					return nil, ErrCombineOverlap
 				}
 				ts[id] = s
 			}
@@ -116,8 +124,8 @@ func (ec *ecdsaBase) Combine(signatures ...types.QuorumSignature) (types.QuorumS
 }
 
 // Verify verifies the given quorum signature against the message.
-func (ec *ecdsaBase) Verify(signature types.QuorumSignature, message []byte) bool {
-	s, ok := signature.(crypto.Multi[*Signature])
+func (ec *EcdsaBase) Verify(signature types.QuorumSignature, message []byte) bool {
+	s, ok := signature.(Multi[*Signature])
 	if !ok {
 		log.Panicf("cannot verify signature of incompatible type %T (expected %T)", signature, s)
 	}
@@ -142,42 +150,7 @@ func (ec *ecdsaBase) Verify(signature types.QuorumSignature, message []byte) boo
 	return valid
 }
 
-// BatchVerify verifies the given quorum signature against the batch of messages.
-func (ec *ecdsaBase) BatchVerify(signature types.QuorumSignature, batch map[types.ID][]byte) bool {
-	s, ok := signature.(crypto.Multi[*Signature])
-	if !ok {
-		log.Panicf("cannot verify signature of incompatible type %T (expected %T)", signature, s)
-	}
-	n := signature.Participants().Len()
-	if n == 0 {
-		return false
-	}
-
-	results := make(chan bool, n)
-	set := make(map[types.Hash]struct{})
-	for id, sig := range s {
-		message, ok := batch[id]
-		if !ok {
-			return false
-		}
-		hash := sha256.Sum256(message)
-		set[hash] = struct{}{}
-		go func(sig *Signature, hash types.Hash) {
-			results <- ec.verifySingle(sig, hash)
-		}(sig, hash)
-	}
-	valid := true
-	for range s {
-		if !<-results {
-			valid = false
-		}
-	}
-
-	// valid if all partial signatures are valid and there are no duplicate messages
-	return valid && len(set) == len(batch)
-}
-
-func (ec *ecdsaBase) verifySingle(sig *Signature, hash types.Hash) bool {
+func (ec *EcdsaBase) verifySingle(sig *Signature, hash types.Hash) bool {
 	r := ec.gConf.ReplicaConf[int(sig.Signer())]
 	pk := r.PubKey.(*ecdsa.PublicKey)
 	return ecdsa.Verify(pk, hash[:], sig.R(), sig.S())

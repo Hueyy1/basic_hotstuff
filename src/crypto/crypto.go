@@ -1,28 +1,22 @@
 package crypto
 
 import (
-	"fmt"
+	"hxy352/src/crypto/ecdsa"
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/types"
 )
 
-// CryptoBase provides the basic cryptographic methods needed to create, verify, and combine signatures.
-type CryptoBase interface {
+// Crypto implements the methods required to create and verify signatures and certificates.
+// This is a higher level interface that is implemented by the crypto package itself.
+type Crypto interface {
 	// Sign creates a cryptographic signature of the given message.
 	Sign(message []byte) (signature types.QuorumSignature, err error)
 	// Combine combines multiple signatures into a single signature.
 	Combine(signatures ...types.QuorumSignature) (signature types.QuorumSignature, err error)
 	// Verify verifies the given quorum signature against the message.
 	Verify(signature types.QuorumSignature, message []byte) bool
-	// BatchVerify verifies the given quorum signature against the batch of messages.
-	BatchVerify(signature types.QuorumSignature, batch map[types.ID][]byte) bool
-}
 
-// Crypto implements the methods required to create and verify signatures and certificates.
-// This is a higher level interface that is implemented by the crypto package itself.
-type Crypto interface {
-	CryptoBase
 	// CreatePartialCert signs a single block and returns the partial certificate.
 	CreatePartialCert(block *model.Block) (cert types.PartialCert, err error)
 	// CreateQuorumCert creates a quorum certificate from a list of partial certificates.
@@ -42,74 +36,36 @@ type Crypto interface {
 	VerifyTimeoutQuorumCert(tv types.TimeoutVote, qc types.QuorumCert) bool
 }
 
-// todo: quick show
-func hotstuffQuorum(n int) (maxFaulty int, minCorrect int, err error) {
-	if n < 4 {
-		return 0, 0, fmt.Errorf("n must be >= 4")
-	}
-	maxFaulty = (n - 1) / 3
-	minCorrect = n - maxFaulty
-	return maxFaulty, minCorrect, nil
-}
-
-// QuorumSize 2f + 1, default = 3
-var QuorumSize = 3
-
-// FaultSize f, default = 1
-var FaultSize = 1
-
-// real fault node, default = 0
-// gConf.FaultNumber
-var IsFaultNode = false
-
 type CryptoImpl struct {
-	//Bc   model.BlockChain
-	GConf *model.Config
-	Conf  *model.ReplicaConf
+	GConf     *model.Config
+	Conf      *model.ReplicaConf
+	EcdsaBase *ecdsa.EcdsaBase
 
-	CryptoBase
+	QuorumSize        int
+	TimeoutQuorumSize int
 }
 
-func (c CryptoImpl) Set_Normal_And_Fault_Size(f int) {
-
-	if f == 0 {
-		return
+func New(conf *model.ReplicaConf, gConf *model.Config, quorumSize, timeoutQuorumSize int) Crypto {
+	return &CryptoImpl{
+		GConf:             gConf,
+		Conf:              conf,
+		EcdsaBase:         ecdsa.New(conf, gConf),
+		QuorumSize:        quorumSize,
+		TimeoutQuorumSize: timeoutQuorumSize,
 	}
-
-	FaultSize = f
-	QuorumSize = 2*f + 1
-
-	c.Set_Fault_Nodes()
-
-	return
 }
 
-// Set_Fault_Nodes return nodes which should perform fault
-func (c CryptoImpl) Set_Fault_Nodes() []types.ID {
-	if c.GConf.FaultNumber == 0 {
-		return []types.ID{}
-	}
-
-	// F    1/2/3/ 4/ 5
-	// node 3/6/9/12/15
-	res := make([]types.ID, 0, c.GConf.FaultNumber)
-	for i := 0; i < c.GConf.FaultNumber; i++ {
-		tmp := types.ID(i*3 + 3)
-		res = append(res, tmp)
-
-		if tmp == c.Conf.Id {
-			IsFaultNode = true
-		}
-	}
-	return res
+func (c CryptoImpl) Sign(message []byte) (signature types.QuorumSignature, err error) {
+	return c.EcdsaBase.Sign(message)
 }
 
-// New returns a new implementation of the Crypto interface. It will use the given CryptoBase to create and verify
-// signatures.
-//func New() Crypto {
-//	return &crypto{CryptoBase: impl}
-//	//return &crypto{CryptoBase: bls12.New()}
-//}
+func (c CryptoImpl) Combine(signatures ...types.QuorumSignature) (signature types.QuorumSignature, err error) {
+	return c.EcdsaBase.Combine(signatures...)
+}
+
+func (c CryptoImpl) Verify(signature types.QuorumSignature, message []byte) bool {
+	return c.EcdsaBase.Verify(signature, message)
+}
 
 // CreatePartialCert signs a single block and returns the partial certificate.
 func (c CryptoImpl) CreatePartialCert(block *model.Block) (cert types.PartialCert, err error) {
@@ -172,7 +128,7 @@ func (c CryptoImpl) VerifyQuorumCert(block *model.Block, qc types.QuorumCert) bo
 	//if participants.Len() < c.configuration.QuorumSize() {
 	//	return false
 	//}
-	if participants.Len() < QuorumSize {
+	if participants.Len() < c.QuorumSize {
 		return false
 	}
 	return c.Verify(qc.Signature(), block.ToBytes())
@@ -187,7 +143,7 @@ func (c CryptoImpl) VerifyTimeoutCert(tc types.TimeoutCert) bool {
 	//if tc.Signature().Participants().Len() < c.configuration.QuorumSize() {
 	//	return false
 	//}
-	if tc.Signature().Participants().Len() < FaultSize+1 {
+	if tc.Signature().Participants().Len() < c.TimeoutQuorumSize {
 		return false
 	}
 	return c.Verify(tc.Signature(), tc.View().ToBytes())
@@ -216,7 +172,7 @@ func (c CryptoImpl) VerifyTimeoutQuorumCert(tv types.TimeoutVote, qc types.Quoru
 	}
 
 	participants := qcSignature.Participants()
-	if participants.Len() < QuorumSize {
+	if participants.Len() < c.QuorumSize {
 		return false
 	}
 	return c.Verify(qc.Signature(), tv.ToBytes())

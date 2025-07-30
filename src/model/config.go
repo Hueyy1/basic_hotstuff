@@ -9,7 +9,9 @@ type Config struct {
 	Replica  []ReplicaConfig   `yaml:"replica" mapstructure:"replica"`
 	Client   ClientConfig      `yaml:"client" mapstructure:"client"`
 	//ReplicaNumber int               `yaml:"replica_number" mapstructure:"replica_number"`
-	FaultNumber int `yaml:"replica_number" mapstructure:"replica_number"`
+	FaultNumber     int  `yaml:"fault_number" mapstructure:"fault_number"`
+	TotalNumber     int  `yaml:"total_number" mapstructure:"total_number"`
+	PacemakerLoaded bool `yaml:"pacemaker_loaded" mapstructure:"pacemaker_loaded"`
 
 	ReplicaConf []ReplicaConf
 	Id          types.ID

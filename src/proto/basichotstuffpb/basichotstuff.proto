@@ -14,6 +14,10 @@ service BasicHotStuff {
     option (gorums.multicast) = true;
   }
 
+  rpc NewViewBasic(Msg) returns (google.protobuf.Empty) {
+    option (gorums.unicast) = true;
+  }
+
   rpc Prepare(Msg) returns (google.protobuf.Empty) {
     option (gorums.multicast) = true;
   }

@@ -21,15 +21,31 @@ type MetricService struct {
 
 func NewMetricService(gConf *model.Config) *MetricService {
 	m := &MetricService{
-		//conf:   conf,
 		gConf:  gConf,
 		Chan:   make(chan model.MetricChanInfo, 1000),
 		tmpMap: make(map[string]model.MetricChanInfo),
 	}
 
-	filename := filepath.Join(gConf.FilePath["files"], fmt.Sprintf("metric_with_%d_fault.csv", gConf.FaultNumber))
+	// create files
+	_, err := os.Stat(gConf.FilePath["files"])
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(gConf.FilePath["files"], 0755)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	name := fmt.Sprintf("metric_with_total_%d_fault_%d", gConf.TotalNumber, gConf.FaultNumber)
+	if gConf.PacemakerLoaded {
+		name = name + "_with_pacemaker.csv"
+	} else {
+		name = name + "_without_pacemaker.csv"
+	}
+	filename := filepath.Join(gConf.FilePath["files"], name)
 	m.InitCsv(filename)
+
 	go m.Handle()
+
 	return m
 }
 
@@ -43,7 +59,7 @@ func (m *MetricService) Handle() {
 		select {
 		case info := <-m.Chan:
 
-			log.Infof("get metric info: %v", info)
+			log.Debugf("get metric info: %v", info)
 
 			m.WriteToCSV(info)
 

@@ -165,6 +165,7 @@ var _ BasicHotStuffClient = (*Configuration)(nil)
 
 // BasicHotStuffNodeClient is the single node client interface for the BasicHotStuff service.
 type BasicHotStuffNodeClient interface {
+	NewViewBasic(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	PrepareVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	PreCommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
 	CommitVote(ctx context.Context, in *Msg, opts ...gorums.CallOption)
@@ -279,6 +280,7 @@ type QuorumSpec interface{}
 // BasicHotStuff is the server-side API for the BasicHotStuff Service
 type BasicHotStuffServer interface {
 	NewView(ctx gorums.ServerCtx, request *Msg)
+	NewViewBasic(ctx gorums.ServerCtx, request *Msg)
 	Prepare(ctx gorums.ServerCtx, request *Msg)
 	PrepareVote(ctx gorums.ServerCtx, request *Msg)
 	PreCommit(ctx gorums.ServerCtx, request *Msg)
@@ -297,6 +299,11 @@ func RegisterBasicHotStuffServer(srv *gorums.Server, impl BasicHotStuffServer) {
 		req := in.Message.(*Msg)
 		defer ctx.Release()
 		impl.NewView(ctx, req)
+	})
+	srv.RegisterHandler("basichotstuffpb.BasicHotStuff.NewViewBasic", func(ctx gorums.ServerCtx, in *gorums.Message, _ chan<- *gorums.Message) {
+		req := in.Message.(*Msg)
+		defer ctx.Release()
+		impl.NewViewBasic(ctx, req)
 	})
 	srv.RegisterHandler("basichotstuffpb.BasicHotStuff.Prepare", func(ctx gorums.ServerCtx, in *gorums.Message, _ chan<- *gorums.Message) {
 		req := in.Message.(*Msg)
@@ -353,6 +360,20 @@ func RegisterBasicHotStuffServer(srv *gorums.Server, impl BasicHotStuffServer) {
 		defer ctx.Release()
 		impl.TimeoutVote(ctx, req)
 	})
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ emptypb.Empty
+
+// NewViewBasic is a quorum call invoked on all nodes in configuration c,
+// with the same argument in, and returns a combined result.
+func (n *Node) NewViewBasic(ctx context.Context, in *Msg, opts ...gorums.CallOption) {
+	cd := gorums.CallData{
+		Message: in,
+		Method:  "basichotstuffpb.BasicHotStuff.NewViewBasic",
+	}
+
+	n.RawNode.Unicast(ctx, cd, opts...)
 }
 
 // Reference imports to suppress errors if they are not otherwise used.

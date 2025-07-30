@@ -13,6 +13,9 @@ import (
 
 func newBasicHotStuffClientCmd() *cobra.Command {
 	var faultNumber int
+	var totalNumber int
+	var pacemakerLoaded bool
+
 	cmd := &cobra.Command{
 		Use:         "bhs-client",
 		Long:        "basic hotstuff client",
@@ -20,7 +23,8 @@ func newBasicHotStuffClientCmd() *cobra.Command {
 		Annotations: hsAnnotations,
 	}
 	cmd.Flags().IntVarP(&faultNumber, "fault_number", "f", 0, "fault_number, start from 0 to 5")
-
+	cmd.Flags().IntVarP(&totalNumber, "total_number", "t", 4, "total_number, start from 4 to 16")
+	cmd.Flags().BoolVarP(&pacemakerLoaded, "pacemaker_loaded", "p", false, "pacemaker_loaded, true or false, default false")
 	return cmd
 }
 
@@ -32,8 +36,16 @@ func startBasicHotStuffClient(cmd *cobra.Command, _ []string) (err error) {
 	gCfg := LoadConfig()
 	log.Debugf("config is %+v", gCfg)
 
-	faultNumber, _ := cmd.Flags().GetInt("fault_number")
-	gCfg.FaultNumber = faultNumber
+	gCfg.FaultNumber, _ = cmd.Flags().GetInt("fault_number")
+	gCfg.TotalNumber, _ = cmd.Flags().GetInt("total_number")
+	gCfg.PacemakerLoaded, _ = cmd.Flags().GetBool("pacemaker_loaded")
+
+	log.Infof(
+		"starting basic hotstuff client: fault_number=%d, total_number=%d, pacemaker_loaded=%v",
+		gCfg.FaultNumber,
+		gCfg.TotalNumber,
+		gCfg.PacemakerLoaded,
+	)
 
 	// start client server
 

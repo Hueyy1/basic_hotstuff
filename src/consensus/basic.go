@@ -2,121 +2,27 @@ package consensus
 
 import (
 	"context"
-	"fmt"
-	"github.com/relab/gorums"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"hxy352/src/crypto"
-	"hxy352/src/crypto/ecdsa"
 	"hxy352/src/log"
 	"hxy352/src/model"
 	"hxy352/src/proto/basichotstuffpb"
-	"hxy352/src/proto/clientpb"
 	"hxy352/src/proto/commonpb"
-	"hxy352/src/service"
 	"hxy352/src/types"
-	"net"
+	"strconv"
 	"sync"
+	"time"
 )
 
 type BasicHotStuff struct {
-	Conf   *model.ReplicaConf
-	gConf  *model.Config
-	crypto crypto.Crypto
-
-	CmdCache *service.CmdCache
-
-	MsgChan  chan *basichotstuffpb.Msg
-	MsgQueue *service.MessageQueueService
-
-	Nodes    []*basichotstuffpb.Node // All nodes in the configuration
-	NodesCfg *basichotstuffpb.Configuration
-	Client   *clientpb.Node
-
-	BlockChain model.BlockChain
-
-	mut sync.RWMutex // to protect the following
-
-	ViewChanging       bool
-	ViewChangeCond     *sync.Cond
-	finishedViewChange map[types.View]bool // fix bug: after view change finished, receive another late req
-
-	CurrentBlock *model.Block
-	CurrentView  types.View
-	PrepareQC    types.QuorumCert
-	PreCommitQC  types.QuorumCert //LockedQC
-	CommitQC     types.QuorumCert
-	HighQC       types.QuorumCert
-
-	verifiedPrepareVotes   map[types.Hash][]types.PartialCert
-	verifiedPreCommitVotes map[types.Hash][]types.PartialCert
-	verifiedCommitVotes    map[types.Hash][]types.PartialCert
-	verifiedTimeoutVotes   map[types.View][]types.QuorumSignature
-
-	highQCTmp map[types.View][]types.QuorumCert
-
-	wishNextViewTmp        map[types.View][]types.QuorumSignature
-	wishFinishedTmp        map[types.View]bool
-	timeoutVoteFinishedTmp map[types.View]bool
-
-	onceReplica sync.Once
-	onceClient  sync.Once
-
-	// metric
-	//metric *service.MetricService
-
-	// pacemaker
-	PaceMaker *CogsWorthPacemaker
+	*HotStuffImpl
 }
 
-func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStuff {
-	bc := service.NewBlockChain()
-
-	cry := crypto.CryptoImpl{
-		GConf:      gConf,
-		Conf:       conf,
-		CryptoBase: ecdsa.New(conf, gConf),
-	}
-	cry.Set_Normal_And_Fault_Size(gConf.FaultNumber)
+func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) HotStuff {
+	log.Infof("*** start init BasicHotStuff ***")
 
 	hs := &BasicHotStuff{
-		Conf:       conf,
-		gConf:      gConf,
-		BlockChain: bc,
-
-		CmdCache: service.NewCmdCache(),
-
-		MsgChan: make(chan *basichotstuffpb.Msg, 1000),
-		//PendingMessages: make(map[types.View][]*basichotstuffpb.Msg),
-		MsgQueue: service.NewMessageQueueService(),
-
-		crypto: cry,
-
-		CurrentView: 1, // Initial view number
-		//PrepareQC:   types.NewQuorumCert(nil, 0, model.GetGenesis().Hash()),
-		//PreCommitQC: types.NewQuorumCert(nil, 0, model.GetGenesis().Hash()),
-		//CommitQC:    types.NewQuorumCert(nil, 0, model.GetGenesis().Hash()),
-		//HighQC:      types.NewQuorumCert(nil, 0, model.GetGenesis().Hash()),
-		//HighQC: CreateQuorumCert(),
-
-		verifiedPrepareVotes:   make(map[types.Hash][]types.PartialCert),
-		verifiedPreCommitVotes: make(map[types.Hash][]types.PartialCert),
-		verifiedCommitVotes:    make(map[types.Hash][]types.PartialCert),
-		verifiedTimeoutVotes:   make(map[types.View][]types.QuorumSignature),
-
-		highQCTmp: make(map[types.View][]types.QuorumCert),
-
-		wishNextViewTmp:        make(map[types.View][]types.QuorumSignature),
-		wishFinishedTmp:        make(map[types.View]bool),
-		timeoutVoteFinishedTmp: make(map[types.View]bool),
-
-		finishedViewChange: make(map[types.View]bool),
-
-		onceReplica: sync.Once{},
-		onceClient:  sync.Once{},
-
-		//metric: service.NewMetricService(conf, gConf),
+		HotStuffImpl: NewHotStuffImpl(conf, gConf),
 	}
+
 	var err error
 	hs.HighQC, err = hs.crypto.CreateQuorumCert(model.GetGenesis(), []types.PartialCert{})
 	if err != nil {
@@ -126,11 +32,24 @@ func NewBasicHotStuff(conf *model.ReplicaConf, gConf *model.Config) *BasicHotStu
 
 	hs.ViewChangeCond = sync.NewCond(&hs.mut)
 
-	//go hs.metric.Handle()
-
-	hs.PaceMaker = NewCogsWorthPacemaker(hs)
+	go func() {
+		if hs.GetLeaderId() == hs.Conf.Id {
+			hs.Ready <- struct{}{}
+		}
+	}()
 
 	return hs
+}
+
+func (hs *BasicHotStuff) Run() {
+	go hs.HandleMsg()
+	go hs.HandleReq()
+
+	go func() {
+		cView := hs.CurrentView
+		hs.ProcessCurrentViewQueue(cView)
+		time.Sleep(10 * time.Millisecond)
+	}()
 }
 
 func (hs *BasicHotStuff) HandleMsg() {
@@ -168,17 +87,6 @@ func (hs *BasicHotStuff) HandleMsg() {
 			hs.ProcessCurrentViewQueue(cView)
 
 			switch msg.Type {
-			case commonpb.MessageType_WishNextView:
-				hs.OnReceiveWishNextView(msg)
-
-			case commonpb.MessageType_Timeout:
-				hs.OnReceiveTimeout(msg)
-
-			case commonpb.MessageType_TimeoutVote:
-				hs.OnReceiveTimeoutVote(msg)
-
-			case commonpb.MessageType_NewView:
-				hs.OnReceiveNewView(msg)
 
 			case commonpb.MessageType_Prepare:
 				hs.OnReceivePrepare(msg)
@@ -201,22 +109,62 @@ func (hs *BasicHotStuff) HandleMsg() {
 			case commonpb.MessageType_Decide:
 				hs.OnReceiveDecide(msg)
 
+			case commonpb.MessageType_NewView:
+				hs.OnReceiveNewView(msg)
+
 			}
 
-		case <-hs.PaceMaker.timeout.Timeout():
-
+		case <-hs.timeout.Timeout():
 			log.Warnf("Timeout received, go to new view !!!")
 
-			hs.PaceMaker.WishToAdvance()
+			// todo: timeout * 2
+			// hs.timeout = service.NewTimeoutService()
+			hs.timeout.Reset()
+			hs.timeout.Stop()
+
+			// todo: if need create empty block???
+			//hs.BlockChain.Store(hs.CreateLeaf(hs.CurrentBlock.Parent(), types.QuorumCert{}, ""))
+
+			hs.mut.Lock()
+
+			hs.CurrentView += 1
+
+			hs.CurrentBlock = nil
+
+			// send new view msg
+			hs.SendNewView()
+
+			hs.mut.Unlock()
 
 		}
 	}
 
 }
 
+func (hs *BasicHotStuff) HandleReq() {
+	for {
+		select {
+		case <-hs.Ready:
+
+			for {
+				req, ok := hs.CmdCache.Dequeue()
+				log.Debugf("hs.CmdCache.Dequeue(): %+v", req)
+				if !ok {
+					continue
+				}
+				if hs.CmdCache.IsFinished(req.GetCmd()) {
+					log.Debugf("hs.CmdCache.IsFinished(): %+v", req.GetCmd())
+					continue
+				}
+				hs.SendPrepare(req)
+				break
+			}
+
+		}
+	}
+}
+
 func (hs *BasicHotStuff) ProcessCurrentViewQueue(cView types.View) {
-	//hs.mut.Lock()
-	//defer hs.mut.Unlock()
 
 	lastMsg := hs.MsgQueue.Pop(cView)
 
@@ -230,8 +178,10 @@ func (hs *BasicHotStuff) ProcessCurrentViewQueue(cView types.View) {
 	// todo: 除了decide，猜测其他情况下可能有bug，只处理了一个vote
 
 	switch lastMsg.GetType() {
-	case commonpb.MessageType_WishNextView:
-		hs.OnReceiveWishNextView(lastMsg)
+	case commonpb.MessageType_NewView:
+
+		// leader
+		hs.OnReceiveNewView(lastMsg)
 
 		for {
 			tMsg := hs.MsgQueue.Pop(cView)
@@ -239,30 +189,10 @@ func (hs *BasicHotStuff) ProcessCurrentViewQueue(cView types.View) {
 				break
 			}
 
-			log.Infof("ProcessCurrentViewQueue: continue wish next view msg found for view %d", cView)
-			hs.OnReceiveWishNextView(tMsg)
+			log.Infof("ProcessCurrentViewQueue: continue new view msg found for view %d", cView)
+			hs.OnReceiveNewView(tMsg)
 		}
 
-	case commonpb.MessageType_Timeout:
-		hs.OnReceiveTimeout(lastMsg)
-
-		log.Infof("OnReceiveTimeout: msg found for view %d", cView)
-
-	case commonpb.MessageType_TimeoutVote:
-		hs.OnReceiveTimeoutVote(lastMsg)
-
-		for {
-			tMsg := hs.MsgQueue.Pop(cView)
-			if tMsg != nil && tMsg.GetType() == commonpb.MessageType_TimeoutVote {
-				log.Infof("OnReceiveTimeoutVote: continue msg found for view %d", cView)
-				hs.OnReceiveTimeoutVote(tMsg)
-			} else {
-				break
-			}
-		}
-
-	case commonpb.MessageType_NewView:
-		hs.OnReceiveNewView(lastMsg)
 	case commonpb.MessageType_Prepare:
 		hs.OnReceivePrepare(lastMsg)
 	case commonpb.MessageType_PrepareVote:
@@ -277,600 +207,14 @@ func (hs *BasicHotStuff) ProcessCurrentViewQueue(cView types.View) {
 		hs.OnReceiveCommitVote(lastMsg)
 	case commonpb.MessageType_Decide:
 		hs.OnReceiveDecide(lastMsg)
-		hs.ProcessCurrentViewQueue(cView + 1)
+		hs.ProcessCurrentViewQueue(hs.CurrentView)
 	}
-
-}
-
-func (hs *BasicHotStuff) LockedQC() types.QuorumCert {
-	return hs.PreCommitQC
-}
-
-func (hs *BasicHotStuff) InitAllReplicaClients() {
-
-	// todo: find a solution to lazy load !!!!!
-
-	// todo: bug, grpc retry
-	// could not create configuration:
-	//connection failed for addr: 127.0.0.1:8002:
-	//starting stream failed: rpc error: code = Unavailable desc = connection error:
-	//desc = "transport: Error while dialing: dial tcp 127.0.0.1:8002:
-	//connect: can't assign requested address"
-
-	mgr := basichotstuffpb.NewManager(
-		gorums.WithGrpcDialOptions(
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		),
-	)
-
-	var adds []string
-	for _, config := range hs.gConf.Replica[0 : crypto.FaultSize+crypto.QuorumSize] {
-		if types.ID(config.Id) == hs.Conf.Id {
-			// Skip myself
-			continue
-		} else {
-			adds = append(adds, fmt.Sprintf("%s:%d", config.Host, config.Port))
-		}
-	}
-
-	allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(adds))
-	if err != nil {
-		log.Panic(err)
-	}
-
-	hs.Nodes = make([]*basichotstuffpb.Node, len(adds))
-	hs.Nodes = allNodesConfig.Nodes()
-	hs.NodesCfg = allNodesConfig
-
-	log.Infof("InitAllReplicaClients finished")
-}
-
-func (hs *BasicHotStuff) GetNodes() []*basichotstuffpb.Node {
-	hs.onceReplica.Do(hs.InitAllReplicaClients)
-	return hs.Nodes
-}
-
-func (hs *BasicHotStuff) GetNodesCfg() *basichotstuffpb.Configuration {
-	hs.onceReplica.Do(hs.InitAllReplicaClients)
-	return hs.NodesCfg
-}
-
-func (hs *BasicHotStuff) InitClient() {
-	mgr := clientpb.NewManager(
-		gorums.WithGrpcDialOptions(
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		),
-	)
-
-	var adds []string
-	adds = append(adds, fmt.Sprintf("%s:%d", hs.gConf.Client.Host, hs.gConf.Client.Port))
-
-	allNodesConfig, err := mgr.NewConfiguration(gorums.WithNodeList(adds))
-	if err != nil {
-		log.Panic(err)
-	}
-
-	hs.Client = allNodesConfig.Nodes()[0]
-
-	log.Infof("InitClient finished")
-}
-
-func (hs *BasicHotStuff) GetClient() *clientpb.Node {
-	hs.onceClient.Do(hs.InitClient)
-	return hs.Client
-}
-
-func (hs *BasicHotStuff) GetLeader() types.ID {
-	totalSize := crypto.FaultSize + crypto.QuorumSize
-	return types.ID(int(hs.CurrentView) % totalSize)
-}
-
-// CreateLeaf is called to create a new leaf block.
-func (hs *BasicHotStuff) CreateLeaf(parentHash types.Hash, cert types.QuorumCert, cmd types.Command) *model.Block {
-	return model.NewBlock(
-		parentHash, // todo: if hs.HighQC.BlockHash() or qc, _ := cert.QC()
-		cert,       // todo if highQC
-		cmd,
-		hs.CurrentView,
-		hs.Conf.Id,
-	)
-}
-
-// SendPrepare is called to propose a new block.
-func (hs *BasicHotStuff) SendPrepare(cmd *basichotstuffpb.Request) {
-
-	hs.mut.Lock()
-	defer hs.mut.Unlock()
-
-	// check if leader, otherwise send to leader
-	l := hs.GetLeader()
-	if l != hs.Conf.Id {
-		log.Warnf("current replica is not leader, current leader is %d, wait... current view: %d", l, hs.CurrentView)
-		return
-	}
-
-	//hs.mut.Lock()
-	//for hs.ViewChanging {
-	//	// 等待 view change 完成
-	//	log.Infof("SendPrepare: waiting view change finished...")
-	//	hs.ViewChangeCond.Wait()
-	//}
-	//// 此时 view 已经稳定
-	//hs.mut.Unlock()
-
-	log.Debugf("try create leaf, %s", hs.HighQC)
-	block := hs.CreateLeaf(hs.HighQC.BlockHash(), hs.HighQC, types.Command(cmd.GetCmd()))
-
-	hs.CurrentBlock = block
-
-	pbBlock := basichotstuffpb.BlockToProto(block)
-
-	prepareMsg := &basichotstuffpb.Msg{
-		Type:        commonpb.MessageType_Prepare,
-		View:        uint64(hs.CurrentView),
-		Block:       pbBlock,
-		PartialCert: nil,
-		QC:          basichotstuffpb.QuorumCertToProto(hs.HighQC),
-		ReplicaId:   uint32(hs.Conf.Id),
-	}
-
-	hs.GetNodesCfg().Prepare(context.Background(), prepareMsg)
-
-	log.Infof("SendPrepare: send prepare msg: %+v", prepareMsg)
-
-	// vote myself
-
-	pc, err := hs.crypto.CreatePartialCert(block)
-
-	if err != nil {
-		log.Errorf("SendPrepare: failed to create partial certificate: %v", err)
-	} else {
-		log.Infof("SendPrepare: vote myself: %s", hs.CurrentBlock)
-		hs.VoteMyself(&pc, commonpb.MessageType_PrepareVote)
-	}
-
-	// metric
-	//p := time.Now()
-	//go hs.metric.Put(model.MetricChanInfo{
-	//	Hash:        block.Hash(),
-	//	View:        hs.CurrentView,
-	//	ProposeTime: &p,
-	//	CommitTime:  nil,
-	//})
-
-	hs.PaceMaker.timeout.SoftStart()
-
-	return
-}
-
-// OnReceivePrepare is called when a prepare message is received.
-func (hs *BasicHotStuff) OnReceivePrepare(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceivePrepare: view:%d", msg.GetView())
-
-	if !hs.MatchingMsg(msg, commonpb.MessageType_Prepare) {
-		log.Errorf("OnReceivePrepare: msg does not match")
-		return
-	}
-
-	pbBlock := msg.GetBlock()
-	block := basichotstuffpb.BlockFromProto(pbBlock)
-
-	// metric
-	//p := time.Now()
-	//go hs.metric.Put(model.MetricChanInfo{
-	//	Hash:        block.Hash(),
-	//	View:        hs.CurrentView,
-	//	ProposeTime: &p,
-	//	CommitTime:  nil,
-	//})
-
-	qcPb := msg.GetQC()
-	if qcPb == nil {
-		log.Errorf("OnReceivePrepare: partial certificate is nil")
-		return
-	}
-
-	// todo: bug, can't verify
-	//if !hs.crypto.VerifyQuorumCert(block, basichotstuffpb.QuorumCertFromProto(qcPb)) {
-	//	log.Warnf("OnReceivePrepare: invalid quorum certificate for block: %+v", block)
-	//	return
-	//}
-
-	// Ensure the block is proposed by the expected leader
-	if hs.GetLeader() != block.Proposer() {
-		log.Warnf("OnReceivePrepare: block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
-		return
-	}
-
-	if !hs.SafeNode(block) {
-		log.Warn("OnReceivePrepare: node is not safe")
-		return
-	}
-
-	hs.CurrentBlock = block
-
-	pc, err := hs.crypto.CreatePartialCert(block)
-
-	if err != nil {
-		log.Errorf("OnReceivePrepare: failed to create partial certificate: %v", err)
-		return
-	}
-
-	// Send prepare vote
-	pCert := basichotstuffpb.PartialCertToProto(pc)
-
-	if crypto.IsFaultNode {
-		pCert = nil
-	}
-
-	prepareVote := &basichotstuffpb.Msg{
-		Type:        commonpb.MessageType_PrepareVote,
-		View:        uint64(hs.CurrentView),
-		Block:       pbBlock,
-		PartialCert: pCert,
-		QC:          nil,
-		ReplicaId:   uint32(hs.Conf.Id),
-	}
-
-	log.Debugf("leader node: %v", hs.GetLeaderNode())
-
-	hs.GetLeaderNode().PrepareVote(context.Background(), prepareVote)
-
-	log.Infof("OnReceivePrepare: sent prepare vote for block: %s", block.Hash())
-
-	hs.PaceMaker.timeout.SoftStart()
-
-}
-
-// OnReceivePrepareVote is called when a prepare vote is received.
-func (hs *BasicHotStuff) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceivePrepareVote: view:%d", msg.GetView())
-
-	if !hs.MatchingMsg(msg, commonpb.MessageType_PrepareVote) {
-		log.Errorf("prepare vote msg does not match")
-		return
-	}
-
-	pcPb := msg.GetPartialCert()
-	if pcPb == nil {
-		log.Errorf("OnReceivePrepareVote: partial certificate is nil")
-		return
-	}
-
-	pc := basichotstuffpb.PartialCertFromProto(pcPb)
-	block := basichotstuffpb.BlockFromProto(msg.GetBlock())
-
-	//if hs.CurrentBlock.Hash() != pc.BlockHash() {
-	//	log.Warnf("OnReceivePrepareVote: currentBlock.Hash() != pc.BlockHash(): %.8s.", pc.BlockHash())
-	//	return
-	//}
-
-	//if hs.CurrentBlock.View() <= hs.HighQC.View() {
-	//	// too old
-	//	log.Warnf("OnReceivePrepareVote: block too old: %.8s.", pc.BlockHash())
-	//	return
-	//}
-
-	if !hs.crypto.VerifyPartialCert(block, pc) {
-		log.Info("OnReceivePrepareVote: Vote could not be verified!")
-		return
-	}
-
-	log.Debugf("OnReceivePrepareVote: Vote PC verified: %.8s", pc.BlockHash())
-
-	hs.mut.Lock()
-	defer hs.mut.Unlock()
-
-	hs.CurrentBlock = block
-
-	// store vote
-	votes := hs.verifiedPrepareVotes[pc.BlockHash()]
-	votes = append(votes, pc)
-	hs.verifiedPrepareVotes[pc.BlockHash()] = votes
-
-	if len(votes) < crypto.QuorumSize {
-		return
-	}
-
-	// todo: bug
-	// if we have 3 pc and we finished to create qc, but got 4th pc
-
-	log.Debugf("OnReceivePrepareVote: get vote size: %d", len(votes))
-
-	qc, err := hs.crypto.CreateQuorumCert(hs.CurrentBlock, votes)
-	if err != nil {
-		log.Info("OnReceivePrepareVote: could not create QC for block: ", err)
-		return
-	}
-
-	// store qc
-	hs.PrepareQC = qc
-
-	// clean votes after create QC
-	delete(hs.verifiedPrepareVotes, pc.BlockHash())
-
-	// send pre-commit
-
-	hs.NodesCfg.PreCommit(context.Background(), &basichotstuffpb.Msg{
-		Type:        commonpb.MessageType_PreCommit,
-		View:        uint64(hs.CurrentView),
-		Block:       msg.GetBlock(),
-		PartialCert: nil,
-		QC:          basichotstuffpb.QuorumCertToProto(qc),
-		ReplicaId:   uint32(hs.Conf.Id),
-	})
-
-	// vote myself
-
-	preCommitPC, err := hs.crypto.CreatePartialCert(block)
-
-	if err != nil {
-		log.Errorf("OnReceivePrepareVote:: failed to create partial certificate: %v", err)
-	} else {
-		hs.VoteMyself(&preCommitPC, commonpb.MessageType_PreCommitVote)
-	}
-
-	hs.PaceMaker.timeout.SoftStart()
-
-}
-
-func (hs *BasicHotStuff) OnReceivePreCommit(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceivePreCommit: view:%d", msg.GetView())
-
-	if !hs.MatchingMsg(msg, commonpb.MessageType_PreCommit) {
-		log.Errorf("OnReceivePreCommit: msg does not match")
-		return
-	}
-
-	//if msg.GetView() < uint64(hs.CurrentView) {
-	//	log.Warnf("OnReceivePreCommit: too old msg")
-	//	return
-	//}
-
-	//pbBlock := msg.GetBlock()
-	//block := basichotstuffpb.BlockFromProto(pbBlock)
-
-	qcPb := msg.GetQC()
-	if qcPb == nil {
-		log.Errorf("OnReceivePreCommit: could not find QC")
-		return
-	}
-
-	qc := basichotstuffpb.QuorumCertFromProto(qcPb)
-	block := basichotstuffpb.BlockFromProto(msg.GetBlock())
-
-	if !hs.crypto.VerifyQuorumCert(block, qc) {
-		log.Warnf("OnReceivePreCommit: invalid quorum certificate for block: %s", msg.GetType().String())
-		return
-	}
-
-	//if hs.CurrentBlock.Hash() != qc.BlockHash() {
-	//	log.Warnf("OnReceivePreCommit: CurrentBlock.Hash() != qc.BlockHash(): %.8s.", qc.BlockHash())
-	//	return
-	//}
-
-	// Ensure the block is proposed by the expected leader
-	if hs.GetLeader() != block.Proposer() {
-		log.Warnf("OnReceivePreCommit: block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
-		return
-	}
-
-	pc, err := hs.crypto.CreatePartialCert(block)
-
-	if err != nil {
-		log.Errorf("OnReceivePreCommit: failed to create partial certificate: %.8s: %v", msg.GetBlock().Hash, err)
-		return
-	}
-
-	pCert := basichotstuffpb.PartialCertToProto(pc)
-
-	// Send preCommit vote
-	if crypto.IsFaultNode {
-		pCert = nil
-	}
-
-	preCommitVote := &basichotstuffpb.Msg{
-		Type:        commonpb.MessageType_PreCommitVote,
-		View:        uint64(hs.CurrentView),
-		Block:       msg.GetBlock(),
-		PartialCert: pCert,
-		QC:          nil,
-		ReplicaId:   uint32(hs.Conf.Id),
-	}
-
-	//log.Debugf("leader node: %v", hs.GetLeaderNode())
-
-	hs.GetLeaderNode().PreCommitVote(context.Background(), preCommitVote)
-
-	log.Infof("OnReceivePreCommit sent preCommit vote for block: %s", block.Hash())
-
-	hs.PaceMaker.timeout.SoftStart()
-
-	hs.mut.Lock()
-	defer hs.mut.Unlock()
-	hs.PrepareQC = qc
-	hs.CurrentBlock = block
-}
-
-// OnReceivePreCommitVote is called when a pre-commit vote is received.
-func (hs *BasicHotStuff) OnReceivePreCommitVote(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceivePreCommitVote: view:%d", msg.GetView())
-
-	//if msg.GetView() < uint64(hs.CurrentView) {
-	//	log.Warnf("OnReceivePreCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
-	//	return
-	//}
-
-	if !hs.MatchingMsg(msg, commonpb.MessageType_PreCommitVote) {
-		log.Panicf("OnReceivePreCommitVote: preCommit vote msg does not match, msg.GetType %s; msg.GetView() %d; hs.CurrentView %d", msg.GetType(), msg.GetView(), hs.CurrentView)
-		return
-	}
-
-	pcPb := msg.GetPartialCert()
-	if pcPb == nil {
-		log.Errorf("OnReceivePreCommitVote: partial certificate is nil")
-		return
-	}
-
-	pc := basichotstuffpb.PartialCertFromProto(pcPb)
-	block := basichotstuffpb.BlockFromProto(msg.GetBlock())
-
-	//if hs.CurrentBlock.Hash() != pc.BlockHash() {
-	//	log.Warnf("OnReceivePreCommitVote: CurrentBlock.Hash() != pc.BlockHash(): %.8s.", pc.BlockHash())
-	//	return
-	//}
-
-	//if hs.CurrentBlock.View() <= hs.HighQC.View() {
-	//	// too old
-	//	log.Warnf("OnReceivePreCommitVote: block too old: %.8s.", pc.BlockHash())
-	//	return
-	//}
-
-	if !hs.crypto.VerifyPartialCert(block, pc) {
-		log.Info("OnReceivePreCommitVote: Vote could not be verified!")
-		return
-	}
-
-	log.Debugf("OnReceivePreCommitVote: Vote PC verified: %.8s", pc.BlockHash())
-
-	hs.mut.Lock()
-	defer hs.mut.Unlock()
-
-	hs.CurrentBlock = block
-
-	// store vote
-	votes := hs.verifiedPreCommitVotes[pc.BlockHash()]
-	votes = append(votes, pc)
-	hs.verifiedPreCommitVotes[pc.BlockHash()] = votes
-
-	if len(votes) < crypto.QuorumSize {
-		return
-	}
-
-	log.Debugf("OnReceivePreCommitVote: get vote size: %d", len(votes))
-
-	qc, err := hs.crypto.CreateQuorumCert(hs.CurrentBlock, votes)
-	if err != nil {
-		log.Info("OnReceivePreCommitVote: could not create QC for block: ", err)
-		return
-	}
-
-	// store qc
-	hs.PreCommitQC = qc
-
-	// clean votes after create QC
-	delete(hs.verifiedPreCommitVotes, pc.BlockHash())
-
-	// send pre-commit
-
-	commitMsg := &basichotstuffpb.Msg{
-		Type:        commonpb.MessageType_Commit,
-		View:        uint64(hs.CurrentView),
-		Block:       msg.GetBlock(),
-		PartialCert: nil,
-		QC:          basichotstuffpb.QuorumCertToProto(qc),
-		ReplicaId:   uint32(hs.Conf.Id),
-	}
-
-	hs.GetNodesCfg().Commit(context.Background(), commitMsg)
-
-	// vote myself
-
-	commitPC, err := hs.crypto.CreatePartialCert(block)
-
-	if err != nil {
-		log.Errorf("OnReceivePreCommitVote: failed to create partial certificate: %v", err)
-	} else {
-		hs.VoteMyself(&commitPC, commonpb.MessageType_CommitVote)
-	}
-
-	hs.PaceMaker.timeout.SoftStart()
-}
-
-// OnReceiveCommit is called to commit a block.
-func (hs *BasicHotStuff) OnReceiveCommit(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceiveCommit: view:%d", msg.GetView())
-
-	if !hs.MatchingMsg(msg, commonpb.MessageType_Commit) {
-		log.Errorf("OnReceiveCommit: msg does not match")
-		return
-	}
-
-	//pbBlock := msg.GetBlock()
-	//block := basichotstuffpb.BlockFromProto(pbBlock)
-
-	qcPb := msg.GetQC()
-	if qcPb == nil {
-		log.Errorf("OnReceiveCommit: could not find QC")
-		return
-	}
-
-	qc := basichotstuffpb.QuorumCertFromProto(qcPb)
-	block := basichotstuffpb.BlockFromProto(msg.GetBlock())
-
-	if !hs.crypto.VerifyQuorumCert(block, qc) {
-		log.Warnf("OnReceiveCommit: invalid quorum certificate for block: %s", msg.GetType().String())
-		return
-	}
-
-	//if hs.CurrentBlock.Hash() != qc.BlockHash() {
-	//	log.Warnf("OnReceiveCommit: Could not find block for vote: %.8s.", qc.BlockHash())
-	//	return
-	//}
-
-	// Ensure the block is proposed by the expected leader
-	if hs.GetLeader() != block.Proposer() {
-		log.Warnf("OnReceiveCommit: block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
-		return
-	}
-
-	pc, err := hs.crypto.CreatePartialCert(block)
-
-	if err != nil {
-		log.Errorf("OnReceiveCommit: failed to create partial certificate: %.8s: %v", msg.GetBlock().Hash, err)
-		return
-	}
-
-	// Send preCommit vote
-	pCert := basichotstuffpb.PartialCertToProto(pc)
-
-	if crypto.IsFaultNode {
-		pCert = nil
-	}
-
-	commitVote := &basichotstuffpb.Msg{
-		Type:        commonpb.MessageType_CommitVote,
-		View:        uint64(hs.CurrentView),
-		Block:       msg.GetBlock(),
-		PartialCert: pCert,
-		QC:          nil,
-		ReplicaId:   uint32(hs.Conf.Id),
-	}
-
-	//log.Debugf("leader node: %v", hs.GetLeaderNode())
-
-	hs.GetLeaderNode().CommitVote(context.Background(), commitVote)
-
-	log.Infof("OnReceiveCommit sent commit vote for block: %s", block.Hash())
-
-	hs.PaceMaker.timeout.SoftStart()
-
-	hs.mut.Lock()
-	defer hs.mut.Unlock()
-	hs.CurrentBlock = block
-	hs.PreCommitQC = qc
 
 }
 
 // OnReceiveCommitVote is called when a pre-commit vote is received.
 func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	log.Infof("OnReceiveCommitVote: view:%d", msg.GetView())
-
-	//// leader has already moved to next view
-	//if msg.GetView() < uint64(hs.CurrentView) {
-	//	log.Warnf("OnReceiveCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
-	//	return
-	//}
 
 	if !hs.MatchingMsg(msg, commonpb.MessageType_CommitVote) {
 		log.Errorf("OnReceiveCommitVote: Commit vote msg does not match")
@@ -886,17 +230,6 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	pc := basichotstuffpb.PartialCertFromProto(pcPb)
 	block := basichotstuffpb.BlockFromProto(msg.GetBlock())
 
-	//if hs.CurrentBlock.Hash() != pc.BlockHash() {
-	//	log.Warnf("OnReceiveCommitVote: Could not find block for vote: %.8s.", pc.BlockHash())
-	//	return
-	//}
-
-	//if hs.CurrentBlock.View() <= hs.HighQC.View() {
-	//	// too old
-	//	log.Warnf("OnReceiveCommitVote: block too old: %.8s.", pc.BlockHash())
-	//	return
-	//}
-
 	if !hs.crypto.VerifyPartialCert(block, pc) {
 		log.Info("OnReceiveCommitVote: Vote could not be verified!")
 		return
@@ -904,8 +237,8 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 
 	log.Debugf("OnReceiveCommitVote: Vote PC verified: %.8s", pc.BlockHash())
 
-	//hs.mut.Lock()
-	//defer hs.mut.Unlock()
+	hs.mut.Lock()
+	defer hs.mut.Unlock()
 
 	hs.CurrentBlock = block
 
@@ -914,7 +247,7 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 	votes = append(votes, pc)
 	hs.verifiedCommitVotes[pc.BlockHash()] = votes
 
-	if len(votes) < crypto.QuorumSize {
+	if len(votes) < hs.NodeManager.QuorumSize {
 		//hs.mut.Unlock()
 		return
 	}
@@ -951,46 +284,32 @@ func (hs *BasicHotStuff) OnReceiveCommitVote(msg *basichotstuffpb.Msg) {
 		ReplicaId:   uint32(hs.Conf.Id),
 	}
 
-	hs.GetNodesCfg().Decide(context.Background(), decideMsg)
+	hs.NodeManager.GetNodesCfg().Decide(context.Background(), decideMsg)
 
 	// exec cmd
-	log.Infof("OnReceiveCommitVote: exec cmd: %s %s", msg.GetBlock().Hash, block.Command())
+	cmdInt, _ := strconv.Atoi(string(block.Command()))
+	log.Infof("OnReceiveCommitVote: exec cmd: %s %d", msg.GetBlock().Hash, cmdInt)
 
-	// metric
-	//p := time.Now()
-	//go hs.metric.Put(model.MetricChanInfo{
-	//	Hash:        hs.CurrentBlock.Hash(),
-	//	View:        hs.CurrentView,
-	//	ProposeTime: nil,
-	//	CommitTime:  &p,
-	//})
-
-	//// view number + 1
-	//hs.CurrentView += 1
+	// view number + 1
+	hs.CurrentView += 1
 
 	// reset currentBlock
 	cmd := string(hs.CurrentBlock.Command())
 	hs.CurrentBlock = nil
 	hs.CmdCache.Finish(cmd)
 
-	// 不触发超时，直接进入new view
-	hs.HighQC = qc
-	//hs.PaceMaker.Ready <- struct{}{}
-
 	//hs.mut.Unlock()
 
 	//hs.mut.Lock()
 	// send new view
-	//hs.SendNewView()
+	hs.SendNewView()
 	//hs.mut.Unlock()
 
 	// todo: if
 	// send response after new-view
 	hs.SendResponse(cmd)
 
-	hs.PaceMaker.timeout.Stop()
-
-	hs.PaceMaker.WishToAdvance()
+	hs.timeout.Stop()
 
 }
 
@@ -1023,8 +342,9 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	//}
 
 	// Ensure the block is proposed by the expected leader
-	if hs.GetLeader() != block.Proposer() {
-		log.Warnf("OnReceiveDecide: block was not proposed by the expected leader: %d, got: %d", hs.GetLeader(), block.Proposer())
+	leader := hs.GetLeaderId()
+	if leader != block.Proposer() {
+		log.Warnf("OnReceiveDecide: block was not proposed by the expected leader: %d, got: %d", leader, block.Proposer())
 		return
 	}
 
@@ -1039,359 +359,114 @@ func (hs *BasicHotStuff) OnReceiveDecide(msg *basichotstuffpb.Msg) {
 	// clean block
 	hs.BlockChain.Clean(block)
 
-	// metric
-	//p := time.Now()
-	//go hs.metric.Put(model.MetricChanInfo{
-	//	Hash:        block.Hash(),
-	//	View:        hs.CurrentView,
-	//	ProposeTime: nil,
-	//	CommitTime:  &p,
-	//})
-
 	hs.mut.Lock()
+	defer hs.mut.Unlock()
 
-	//// view number + 1
-	//hs.CurrentView = types.View(msg.View + 1)
-	//log.Infof("OnReceiveDecide: set new view %d", hs.CurrentView)
+	// view number + 1
+	hs.CurrentView = types.View(msg.View + 1)
+	log.Infof("OnReceiveDecide: set new view %d", hs.CurrentView)
 
 	// reset block
 	cmd := string(block.Command())
 	hs.CurrentBlock = nil
 
 	// leader start change new view
-	//if hs.GetLeader() == hs.Conf.Id {
-	//	hs.ViewChanging = true
-	//}
+	if hs.GetLeaderId() == hs.Conf.Id {
+		hs.ViewChanging = true
+	}
 
 	// todo: update highqc ? is it right?
 	hs.HighQC = qc
 	hs.CommitQC = qc
 
-	//hs.PaceMaker.Ready <- struct{}{}
+	// send new view to next leader
+	hs.SendNewView()
 
 	// send response
 	hs.SendResponse(cmd)
 
-	hs.PaceMaker.timeout.Stop()
-
-	hs.mut.Unlock()
-
-	// send wish to next leader
-	hs.PaceMaker.WishToAdvance()
+	hs.timeout.Stop()
 
 }
 
-func (hs *BasicHotStuff) SendWishNextView() {
-	sig, _ := hs.crypto.Sign(hs.CurrentView.ToBytes())
-	msg := &basichotstuffpb.Msg{
-		Type:      commonpb.MessageType_WishNextView,
-		View:      uint64(hs.CurrentView),
-		ReplicaId: uint32(hs.Conf.Id),
-		ViewSig:   basichotstuffpb.QuorumSignatureToProto(sig),
-	}
+func (hs *BasicHotStuff) SendNewView() {
+	// send new view to next leader
 
-	if hs.GetLeader() == hs.Conf.Id {
-		hs.OnReceiveWishNextView(msg)
+	l := hs.GetLeaderId()
+	if l == hs.Conf.Id {
+		// new view to myself
+
+		//hs.mut.Lock()
+
+		//hs.highQCTmp = append(hs.highQCTmp, hs.PrepareQC)
+		hs.highQCTmp[hs.CurrentView] = append(hs.highQCTmp[hs.CurrentView], hs.PrepareQC)
+
+		hs.ViewChanging = true
+
+		hs.ProcessCurrentViewQueue(hs.CurrentView)
+		//hs.ProcessCurrentViewQueue(hs.CurrentView + 1)
+
+		length := len(hs.highQCTmp[hs.CurrentView])
+		//log.Infof("highQCTmp: %v", hs.highQCTmp[hs.CurrentView])
+		log.Infof("SendNewView: send new view %d to myself, View Changing... get %d qc", hs.CurrentView, length)
+
+		if length < hs.NodeManager.QuorumSize {
+			return
+		}
+
+		hs.processNewView()
+
+		//hs.ProcessQueue(hs.CurrentView)
+
+		//hs.mut.Unlock()
 		return
 	}
 
-	hs.GetLeaderNode().WishNextView(context.Background(), msg)
-}
+	log.Infof("OnSendNewView: sending new view to leader: %d", l)
 
-func (hs *BasicHotStuff) OnReceiveWishNextView(msg *basichotstuffpb.Msg) {
-	//hs.mut.Lock()
-	//defer hs.mut.Unlock()
-
-	newView := types.View(msg.GetView())
-
-	log.Infof("OnReceiveWishNextView: view:%d", msg.GetView())
-
-	if hs.wishFinishedTmp[newView] {
-		log.Warnf("OnReceiveWishNextView: view:%d, wish finished , ignore", msg.GetView())
-		return
-	}
-
-	hs.PaceMaker.timeout.SoftStart()
-
-	sig := basichotstuffpb.QuorumSignatureFromProto(msg.GetViewSig())
-
-	if !hs.crypto.Verify(sig, newView.ToBytes()) {
-		log.Errorf("OnReceiveWishNextView: invalid view quorum signature")
-		return
-	}
-
-	hs.wishNextViewTmp[newView] = append(hs.wishNextViewTmp[newView], sig)
-
-	length := len(hs.wishNextViewTmp[newView])
-
-	log.Infof("OnReceiveWishNextView: view:%d, current length: %d", newView, length)
-
-	// need f + 1 messages
-	if length < crypto.FaultSize+1 {
-		return
-	}
-
-	// create timeout cert
-	cert, err := hs.crypto.CreateTimeoutCert(newView, hs.wishNextViewTmp[newView])
-	if err != nil {
-		log.Errorf("OnReceiveWishNextView: could not create timeout cert")
-		return
-	}
-
-	timeoutMsg := &basichotstuffpb.Msg{
-		Type:      commonpb.MessageType_Timeout,
-		View:      msg.GetView(),
-		TC:        basichotstuffpb.TimeoutCertToProto(cert),
-		ReplicaId: uint32(hs.Conf.Id),
-	}
-	hs.NodesCfg.Timeout(context.Background(), timeoutMsg)
-	log.Infof("OnReceiveWishNextView: send timeout(%d) msg ", newView)
-
-	// clean wishes
-	delete(hs.wishNextViewTmp, newView)
-	hs.wishFinishedTmp[newView] = true
-
-	// vote myself
-	tv := types.NewTimeoutVote(newView, cert)
-	sigVote, _ := hs.crypto.CreateTimeoutVoteCert(tv)
-	hs.OnReceiveTimeoutVote(&basichotstuffpb.Msg{
-		Type:      commonpb.MessageType_TimeoutVote,
-		View:      msg.GetView(),
-		ReplicaId: uint32(hs.Conf.Id),
-		ViewSig:   basichotstuffpb.QuorumSignatureToProto(sigVote),
-		TC:        timeoutMsg.TC,
-
-		// todo: 此处为QC？？
-		QC: basichotstuffpb.QuorumCertToProto(hs.PrepareQC),
+	hs.GetLeaderNode().NewViewBasic(context.Background(), &basichotstuffpb.Msg{
+		Type:        commonpb.MessageType_NewView,
+		View:        uint64(hs.CurrentView),
+		Block:       nil,
+		PartialCert: nil,
+		QC:          basichotstuffpb.QuorumCertToProto(hs.PrepareQC),
 	})
-
+	//hs.Ready <- struct{}{}
 }
-
-func (hs *BasicHotStuff) OnReceiveTimeout(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceiveTimeout: view:%d", msg.GetView())
-
-	if msg.GetType() != commonpb.MessageType_Timeout {
-		return
-	}
-
-	//hs.mut.Lock()
-	//defer hs.mut.Unlock()
-
-	tc := basichotstuffpb.TimeoutCertFromProto(msg.GetTC())
-	ok := hs.crypto.VerifyTimeoutCert(tc)
-	if !ok {
-		log.Errorf("OnReceiveTimeout: invalid timeout cert")
-		return
-	}
-
-	newView := types.View(msg.GetView())
-	tv := types.NewTimeoutVote(newView, tc)
-	sig, _ := hs.crypto.CreateTimeoutVoteCert(tv)
-
-	hs.GetLeaderNode().TimeoutVote(context.Background(), &basichotstuffpb.Msg{
-		Type:      commonpb.MessageType_TimeoutVote,
-		View:      msg.GetView(),
-		ReplicaId: uint32(hs.Conf.Id),
-		ViewSig:   basichotstuffpb.QuorumSignatureToProto(sig),
-		TC:        msg.GetTC(),
-
-		// todo: 此处为QC？？
-		QC: basichotstuffpb.QuorumCertToProto(hs.PrepareQC),
-	})
-
-	log.Infof("OnReceiveTimeout: send vote view:%d", msg.GetView())
-
-}
-
-func (hs *BasicHotStuff) OnReceiveTimeoutVote(msg *basichotstuffpb.Msg) {
-	log.Infof("OnReceiveTimeoutVote: view:%d", msg.GetView())
-
-	if msg.GetType() != commonpb.MessageType_TimeoutVote {
-		log.Warnf("OnReceiveTimeoutVote: view:%s, wrong type ", msg.GetType())
-		return
-	}
-
-	newView := types.View(msg.GetView())
-
-	if hs.timeoutVoteFinishedTmp[newView] != true {
-		hs.PaceMaker.timeout.SoftStart()
-	} else {
-		log.Warnf("OnReceiveTimeoutVote: view:%s, vote finished, ingore ", msg.GetType())
-		return
-	}
-
-	//hs.mut.Lock()
-	//defer hs.mut.Unlock()
-
-	sig := basichotstuffpb.QuorumSignatureFromProto(msg.GetViewSig())
-
-	tv := types.NewTimeoutVote(newView, basichotstuffpb.TimeoutCertFromProto(msg.GetTC()))
-
-	if !hs.crypto.VerifyTimeoutVoteCert(tv, sig) {
-		log.Errorf("OnReceiveTimeoutVote: invalid view quorum signature")
-		return
-	}
-
-	hs.verifiedTimeoutVotes[newView] = append(hs.verifiedTimeoutVotes[newView], sig)
-
-	hs.highQCTmp[newView] = append(hs.highQCTmp[newView], basichotstuffpb.QuorumCertFromProto(msg.GetQC()))
-
-	length := len(hs.verifiedTimeoutVotes[newView])
-
-	hs.ViewChanging = true
-
-	log.Infof("OnReceiveTimeoutVote: get view %d votes length %d ", newView, length)
-
-	if length < crypto.QuorumSize {
-		return
-	}
-
-	qc, _ := hs.crypto.CreateTimeoutQuorumCert(tv, hs.verifiedTimeoutVotes[newView])
-	hs.processNewView(msg, qc)
-
-	delete(hs.verifiedTimeoutVotes, newView)
-}
-
-//func (hs *BasicHotStuff) SendNewView() {
-//	// send new view to next leader
-//
-//	l := hs.GetLeader()
-//	if l == hs.Conf.Id {
-//		// new view to myself
-//
-//		//hs.mut.Lock()
-//
-//		//hs.highQCTmp = append(hs.highQCTmp, hs.PrepareQC)
-//		hs.highQCTmp[hs.CurrentView] = append(hs.highQCTmp[hs.CurrentView], hs.PrepareQC)
-//
-//		hs.ViewChanging = true
-//
-//		hs.ProcessCurrentViewQueue(hs.CurrentView)
-//		//hs.ProcessCurrentViewQueue(hs.CurrentView + 1)
-//
-//		length := len(hs.highQCTmp[hs.CurrentView])
-//		//log.Infof("highQCTmp: %v", hs.highQCTmp[hs.CurrentView])
-//		log.Infof("SendNewView: send new view %d to myself, View Changing... get %d qc", hs.CurrentView, length)
-//
-//		if length < crypto.QuorumSize {
-//			return
-//		}
-//
-//		hs.processNewView()
-//
-//		//hs.ProcessQueue(hs.CurrentView)
-//
-//		//hs.mut.Unlock()
-//		return
-//	}
-//
-//	log.Infof("OnSendNewView: sending new view to leader: %d", l)
-//
-//	hs.GetLeaderNode().NewView(context.Background(), &basichotstuffpb.Msg{
-//		Type:        commonpb.MessageType_NewView,
-//		View:        uint64(hs.CurrentView),
-//		Block:       nil,
-//		PartialCert: nil,
-//		QC:          basichotstuffpb.QuorumCertToProto(hs.PrepareQC),
-//	})
-//}
 
 // OnReceiveNewView is called when a new view message is received.
 func (hs *BasicHotStuff) OnReceiveNewView(msg *basichotstuffpb.Msg) {
-	//log.Errorf("OnReceiveNewView: error receive new view: %d, current: %d", msg.GetView(), hs.CurrentView)
+	log.Infof("OnReceiveNewView: receive new view: %d", msg.GetView())
 
-	//hs.mut.Lock()
-	//defer hs.mut.Unlock()
-
-	//if msg.GetView() < uint64(hs.CurrentView) {
-	//	log.Warnf("OnReceiveNewView: received old new view(%d), current(%d), ignore", msg.GetView(), hs.CurrentView)
-	//	return
-	//}
-
-	//// todo: bug: a new view msg will be processed before decide msg.
-	//if msg.GetView() > uint64(hs.CurrentView) {
-	//	log.Infof("OnReceiveNewView: received new view (%d) before current decide (%d), put it into pending...", msg.GetView(), hs.CurrentView)
-	//	hs.PendingMessages[types.View(msg.GetView())] = append(hs.PendingMessages[types.View(msg.GetView())], msg)
-	//	return
-	//}
-
-	//// process pending new views
-	//if data, ok := hs.PendingMessages[types.View(msg.GetView())]; ok {
-	//	for i, pMsg := range data {
-	//
-	//		log.Infof("OnReceiveNewView: process %d pending msg...", i)
-	//
-	//		qcPb := pMsg.GetQC()
-	//		if qcPb == nil {
-	//			log.Errorf("OnReceiveNewView: could not find QC")
-	//			continue
-	//		}
-	//
-	//		qc := basichotstuffpb.QuorumCertFromProto(qcPb)
-	//
-	//		hs.highQCTmp[hs.CurrentView] = append(hs.highQCTmp[hs.CurrentView], qc)
-	//	}
-	//}
-
-	log.Infof("OnReceiveNewView: receive new view: %d, msg: %+v", msg.GetView(), msg)
-
-	tv := types.NewTimeoutVote(types.View(msg.View), basichotstuffpb.TimeoutCertFromProto(msg.GetTC()))
-	qc := basichotstuffpb.QuorumCertFromProto(msg.GetQC())
-	if !hs.crypto.VerifyTimeoutQuorumCert(tv, qc) {
-		log.Errorf("OnReceiveNewView: invalid view quorum cert")
+	if hs.finishedViewChange[hs.CurrentView] == true {
+		log.Infof("OnReceiveNewView: already finished view change: %d", msg.GetView())
 		return
 	}
 
-	hs.processNewView(msg, qc)
+	qcPb := msg.GetQC()
+	if qcPb == nil {
+		log.Errorf("OnReceiveNewView: could not find QC")
+		return
+	}
 
-	//if msg.GetView() < uint64(hs.CurrentView) {
-	//	log.Warnf("OnReceivePreCommitVote: vote from view %d is too low, current view has moved to %d ", msg.GetView(), hs.CurrentView)
-	//	return
-	//}
+	qc := basichotstuffpb.QuorumCertFromProto(qcPb)
 
-	//if hs.finishedViewChange[hs.CurrentView] == true {
-	//	log.Infof("OnReceiveNewView: already finished view change: %d", msg.GetView())
-	//	return
-	//}
-	//
-	//qcPb := msg.GetQC()
-	//if qcPb == nil {
-	//	log.Errorf("OnReceiveNewView: could not find QC")
-	//	return
-	//}
-	//
-	//qc := basichotstuffpb.QuorumCertFromProto(qcPb)
-	//
-	//t := hs.highQCTmp[hs.CurrentView]
-	//t = append(t, qc)
-	//hs.highQCTmp[hs.CurrentView] = t
-	//
-	//hs.ViewChanging = true
-	////log.Infof("highQCTmp: %v", hs.highQCTmp[hs.CurrentView])
-	//log.Infof("OnReceiveNewView: View Changing... get %d qc", len(hs.highQCTmp[hs.CurrentView]))
-	//
-	//if len(hs.highQCTmp[hs.CurrentView]) < crypto.QuorumSize {
-	//	return
-	//}
-	//
-	//hs.processNewView()
+	t := hs.highQCTmp[hs.CurrentView]
+	t = append(t, qc)
+	hs.highQCTmp[hs.CurrentView] = t
+
+	hs.ViewChanging = true
+	//log.Infof("highQCTmp: %v", hs.highQCTmp[hs.CurrentView])
+	log.Infof("OnReceiveNewView: View Changing... get %d qc", len(hs.highQCTmp[hs.CurrentView]))
+
+	if len(hs.highQCTmp[hs.CurrentView]) < hs.NodeManager.QuorumSize {
+		return
+	}
+
+	hs.processNewView()
 }
 
-func (hs *BasicHotStuff) processNewView(msg *basichotstuffpb.Msg, qc types.QuorumCert) {
-
-	if hs.GetLeader() == hs.Conf.Id {
-		// todo: maybe bug block not found ?????
-		block, _ := hs.BlockChain.Get(hs.HighQC.BlockHash())
-		hs.NodesCfg.NewView(context.Background(), &basichotstuffpb.Msg{
-			Type:      commonpb.MessageType_NewView,
-			View:      msg.GetView(),
-			QC:        basichotstuffpb.QuorumCertToProto(qc),
-			ReplicaId: uint32(hs.Conf.Id),
-			TC:        msg.GetTC(),
-
-			Block: basichotstuffpb.BlockToProto(block),
-		})
-	}
+func (hs *BasicHotStuff) processNewView() {
 
 	maxQC := hs.PrepareQC
 
@@ -1423,11 +498,7 @@ func (hs *BasicHotStuff) processNewView(msg *basichotstuffpb.Msg, qc types.Quoru
 	log.Infof("processNewView: new view %d finished, next view len: %d", hs.CurrentView, len(hs.MsgQueue.Get(hs.CurrentView+1)))
 
 	// 通知handleReq
-	hs.PaceMaker.Ready <- struct{}{}
-
-	hs.PaceMaker.timeout.Stop()
-
-	hs.timeoutVoteFinishedTmp[hs.CurrentView] = true
+	hs.Ready <- struct{}{}
 
 	//// try to chase new msg
 	//cView := hs.CurrentView
@@ -1441,111 +512,5 @@ func (hs *BasicHotStuff) processNewView(msg *basichotstuffpb.Msg, qc types.Quoru
 	//	log.Infof("processNewView: broadcast view %d change finished", cView)
 	//	hs.ViewChangeCond.Broadcast() // 唤醒等待请求
 	//}
-
-}
-func (hs *BasicHotStuff) MatchingMsg(msg *basichotstuffpb.Msg, msgType commonpb.MessageType) bool {
-	return msg.GetType() == msgType && msg.GetView() == uint64(hs.CurrentView)
-}
-
-func (hs *BasicHotStuff) SafeNode(block *model.Block) bool {
-
-	// liveness
-	if block.View() > hs.LockedQC().View() {
-		return true
-	}
-
-	log.Debug("liveness condition failed")
-
-	// safety
-	lockedBlock, ok := hs.BlockChain.Get(hs.LockedQC().BlockHash())
-
-	if !ok {
-		log.Error("failed to get locked block")
-		return false
-	}
-
-	if hs.BlockChain.Extends(block, lockedBlock) {
-		return true
-	}
-
-	log.Debug("safety condition failed")
-
-	return false
-}
-
-// GetLeaderAddress get leader address
-func (hs *BasicHotStuff) GetLeaderAddress() string {
-	leaderIdx := int(hs.GetLeader())
-	return fmt.Sprintf("%s:%d", hs.gConf.Replica[leaderIdx].Host, hs.gConf.Replica[leaderIdx].Port)
-}
-
-// GetLeaderNode get leader node
-func (hs *BasicHotStuff) GetLeaderNode() *basichotstuffpb.Node {
-	leaderAddress := hs.GetLeaderAddress()
-	a1, _ := normalizeAddr(leaderAddress)
-
-	for _, node := range hs.GetNodes() {
-		//log.Debugf("node.Address: %s, leaderAddress: %s", node.Address(), leaderAddress)
-		a2, _ := normalizeAddr(node.Address())
-		if a1 == a2 {
-			return node
-		}
-	}
-	return nil
-}
-
-func normalizeAddr(addr string) (string, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", err
-	}
-
-	ipAddr, err := net.ResolveIPAddr("ip", host)
-	if err != nil {
-		return "", err
-	}
-
-	return net.JoinHostPort(ipAddr.IP.String(), port), nil
-}
-
-func (hs *BasicHotStuff) VoteMyself(pc *types.PartialCert, voteType commonpb.MessageType) {
-	if hs.GetLeader() != hs.Conf.Id {
-		return
-	}
-
-	//hs.mut.Lock()
-	//defer hs.mut.Unlock()
-
-	switch voteType {
-	case commonpb.MessageType_PrepareVote:
-		votes := hs.verifiedPrepareVotes[pc.BlockHash()]
-		votes = append(votes, *pc)
-		hs.verifiedPrepareVotes[pc.BlockHash()] = votes
-	case commonpb.MessageType_PreCommitVote:
-		votes := hs.verifiedPreCommitVotes[pc.BlockHash()]
-		votes = append(votes, *pc)
-		hs.verifiedPreCommitVotes[pc.BlockHash()] = votes
-	case commonpb.MessageType_CommitVote:
-		votes := hs.verifiedCommitVotes[pc.BlockHash()]
-		votes = append(votes, *pc)
-		hs.verifiedCommitVotes[pc.BlockHash()] = votes
-	default:
-		log.Warnf("PrepareVoteMyself: unknown vote type: %v", voteType)
-	}
-}
-
-func (hs *BasicHotStuff) SendResponse(cmd string) {
-
-	res := &clientpb.Response{
-		Result:    "OK",
-		Cmd:       cmd,
-		ReplicaId: uint32(hs.Conf.Id),
-	}
-
-	log.Infof("try get client: %v", hs.GetClient())
-
-	hs.GetClient().SendResponse(context.Background(), res)
-
-	log.Infof("Sending response: %s", res.String())
 
 }
