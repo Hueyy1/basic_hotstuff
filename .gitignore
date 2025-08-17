@@ -392,13 +392,10 @@ src/settings/config-map.yaml
 src/settings/*.pem
 src/settings/*.csr
 src/settings/*.key
-src/settings/foreign-phone-location.yaml
 temp
 
 main
 configs/config-log.yaml
-configs/config-map.yaml
-configs/config-map-docker.yaml
 configs/*.pem
 configs/*.csr
 configs/*.key
