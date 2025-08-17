@@ -94,7 +94,7 @@ func NewHotStuffImpl(conf *model.ReplicaConf, gConf *model.Config) *HotStuffImpl
 		CmdCache: service.NewCmdCache(),
 		Ready:    make(chan struct{}),
 
-		timeout: service.NewTimeoutService(1 * time.Second),
+		timeout: service.NewTimeoutService(200 * time.Millisecond),
 
 		MsgChan:  make(chan *basichotstuffpb.Msg, 1000),
 		MsgQueue: service.NewMessageQueueService(),
@@ -372,6 +372,12 @@ func (hs *HotStuffImpl) OnReceivePrepareVote(msg *basichotstuffpb.Msg) {
 	hs.verifiedPrepareVotes[pc.BlockHash()] = votes
 
 	if len(votes) < hs.NodeManager.QuorumSize {
+		return
+	}
+
+	// mock fault leader
+	if hs.NodeManager.IsFaultNode() {
+		log.Infof("OnReceivePrepareVote: mock fault leader, view %d", msg.GetView())
 		return
 	}
 

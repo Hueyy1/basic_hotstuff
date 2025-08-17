@@ -37,9 +37,9 @@ func NewMetricService(gConf *model.Config) *MetricService {
 
 	name := fmt.Sprintf("metric_with_total_%d_fault_%d", gConf.TotalNumber, gConf.FaultNumber)
 	if gConf.PacemakerLoaded {
-		name = name + "_with_pacemaker.csv"
+		name = name + "_with_cogsworth.csv"
 	} else {
-		name = name + "_without_pacemaker.csv"
+		name = name + "_without_cogsworth.csv"
 	}
 	filename := filepath.Join(gConf.FilePath["files"], name)
 	m.InitCsv(filename)

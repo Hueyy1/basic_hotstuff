@@ -609,6 +609,12 @@ func (hs *BasicHotStuffWithCogsworth) processNewView(msg *basichotstuffpb.Msg, q
 
 			Block: basichotstuffpb.BlockToProto(block),
 		})
+
+		defer func() {
+			// 通知handleReq
+			log.Infof("processNewView: send ready signal")
+			hs.Ready <- struct{}{}
+		}()
 	}
 
 	maxQC := hs.PrepareQC
@@ -639,9 +645,6 @@ func (hs *BasicHotStuffWithCogsworth) processNewView(msg *basichotstuffpb.Msg, q
 
 	hs.ViewChanging = false
 	log.Infof("processNewView: new view %d finished, next view len: %d", hs.CurrentView, len(hs.MsgQueue.Get(hs.CurrentView+1)))
-
-	// 通知handleReq
-	hs.Ready <- struct{}{}
 
 	hs.timeout.Stop()
 

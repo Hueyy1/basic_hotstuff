@@ -136,6 +136,9 @@ func (hs *BasicHotStuff) HandleMsg() {
 
 			hs.mut.Unlock()
 
+			// try process current view msg
+			hs.ProcessCurrentViewQueue(hs.CurrentView)
+
 		}
 	}
 

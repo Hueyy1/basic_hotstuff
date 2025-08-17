@@ -8,124 +8,148 @@
 import signal
 import subprocess
 import os
-
-from build import build, SRC_MAIN
-
+import sys
 
 CONFIG_PATH = "../configs/config-map.yaml"
 LOG_DIR = "../logs"
 FILES_DIR = "../files"
 VIS_DIR = "../visualization"
+SRC_MAIN = "../src/main"
 
 # 确保 logs 目录存在
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
-def start_server(fault_number: int = 0, total_number: int = 4, pacemaker_loaded: bool = False):
-    if total_number < 4 or total_number > 16:
-        raise Exception("total number can't lt 4 or gt 16")
+class Executor(object):
 
-    if fault_number < 0 or fault_number > 5:
-        raise Exception("fault number can't lt 0 or gt 5")
+    def __init__(self, scenario: str = "a"):
+        self.scenario = scenario
 
-    for node_id in range(total_number):
-        print(f"🚀 Starting instance with id={node_id}")
+    @staticmethod
+    def build():
+        # 编译 Go 程序
+        print("🔨 Building Go program...")
+        build_cmd = ["go", "build", "-o", SRC_MAIN, "../src/main.go"]
+        result = subprocess.run(build_cmd)
+        if result.returncode != 0:
+            print("❌ Go build failed.")
+            sys.exit(1)
+        print("✅ Build complete.")
 
-        log_file = open(f"{LOG_DIR}/main_{node_id}.log", "w")
-        process = subprocess.Popen([
-            SRC_MAIN, "bhs",
+    @staticmethod
+    def start_server(fault_number: int = 0, total_number: int = 4, pacemaker_loaded: bool = False):
+        if total_number < 4 or total_number > 16:
+            raise Exception("total number can't lt 4 or gt 16")
+
+        if fault_number < 0 or fault_number > 5:
+            raise Exception("fault number can't lt 0 or gt 5")
+
+        for node_id in range(total_number):
+            print(f"🚀 Starting instance with id={node_id}")
+
+            log_file = open(f"{LOG_DIR}/main_{node_id}.log", "w")
+            process = subprocess.Popen([
+                SRC_MAIN, "bhs",
+                f"--config={CONFIG_PATH}",
+                f"--id={node_id}",
+                f"--fault_number={fault_number}",
+                f"--total_number={total_number}",
+                f"--pacemaker_loaded={ 'true' if pacemaker_loaded else 'false' }"
+            ], stdout=log_file, stderr=subprocess.STDOUT)
+
+            # record PID
+            with open(f"{LOG_DIR}/main_{node_id}.pid", "w") as pidfile:
+                pidfile.write(str(process.pid))
+
+        print("🟢 All replicas started.")
+
+
+    @staticmethod
+    def start_client(fault_number: int = 0, total_number: int = 4, pacemaker_loaded: bool = False):
+
+        # start client
+        print("🚀 Starting client...")
+        client_log = open(f"{LOG_DIR}/main_client.log", "w")
+        client_process = subprocess.Popen([
+            SRC_MAIN, "bhs-client",
             f"--config={CONFIG_PATH}",
-            f"--id={node_id}",
             f"--fault_number={fault_number}",
             f"--total_number={total_number}",
             f"--pacemaker_loaded={ 'true' if pacemaker_loaded else 'false' }"
-        ], stdout=log_file, stderr=subprocess.STDOUT)
+        ], stdout=client_log, stderr=subprocess.STDOUT)
 
-        # record PID
-        with open(f"{LOG_DIR}/main_{node_id}.pid", "w") as pidfile:
-            pidfile.write(str(process.pid))
+        # 写入客户端 PID
+        with open(f"{LOG_DIR}/main_client.pid", "w") as f:
+            f.write(str(client_process.pid))
 
-    print("🟢 All replicas started.")
+        return client_process
 
+    def run(self, fault_number: int = 0, total_number: int = 4, pacemaker_loaded: bool = False):
+        self.start_server(fault_number, total_number, pacemaker_loaded)
 
-def start_client(fault_number: int = 0, total_number: int = 4, pacemaker_loaded: bool = False):
+        client_process = self.start_client(fault_number, total_number, pacemaker_loaded)
 
-    # start client
-    print("🚀 Starting client...")
-    client_log = open(f"{LOG_DIR}/main_client.log", "w")
-    client_process = subprocess.Popen([
-        SRC_MAIN, "bhs-client",
-        f"--config={CONFIG_PATH}",
-        f"--fault_number={fault_number}",
-        f"--total_number={total_number}",
-        f"--pacemaker_loaded={ 'true' if pacemaker_loaded else 'false' }"
-    ], stdout=client_log, stderr=subprocess.STDOUT)
+        print(f"⏳ Waiting for client (PID {client_process.pid}) to finish...")
 
-    # 写入客户端 PID
-    with open(f"{LOG_DIR}/main_client.pid", "w") as f:
-        f.write(str(client_process.pid))
+        # 等待客户端结束
+        client_process.wait()
 
-    return client_process
+        print("✅ Client finished. Stopping all replicas...")
 
+    @staticmethod
+    def stop(total_number: int = 4):
 
-def run(fault_number: int = 0, total_number: int = 4, pacemaker_loaded: bool = False):
-    start_server(fault_number, total_number, pacemaker_loaded)
+        for node_id in range(total_number):
+            pid_file = os.path.join(LOG_DIR, f"main_{node_id}.pid")
+            if os.path.isfile(pid_file):
+                with open(pid_file) as f:
+                    pid = int(f.read().strip())
+                print(f"🛑 Stopping instance id={node_id} (PID {pid})...")
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    print(f"⚠️  Process {pid} already terminated.")
+                os.remove(pid_file)
+            else:
+                print(f"❓ PID file for id={node_id} not found.")
 
-    client_process = start_client(fault_number, total_number, pacemaker_loaded)
+        print("✅ All server stopped.")
 
-    print(f"⏳ Waiting for client (PID {client_process.pid}) to finish...")
-
-    # 等待客户端结束
-    client_process.wait()
-
-    print("✅ Client finished. Stopping all replicas...")
-
-
-def stop(total_number: int = 4):
-
-    for node_id in range(total_number):
-        pid_file = os.path.join(LOG_DIR, f"main_{node_id}.pid")
-        if os.path.isfile(pid_file):
-            with open(pid_file) as f:
-                pid = int(f.read().strip())
-            print(f"🛑 Stopping instance id={node_id} (PID {pid})...")
+        # 停止客户端
+        client_pid_file = os.path.join(LOG_DIR, "main_client.pid")
+        if os.path.isfile(client_pid_file):
+            with open(client_pid_file) as f:
+                client_pid = int(f.read().strip())
+            print(f"🛑 Stopping client (PID {client_pid})...")
             try:
-                os.kill(pid, signal.SIGTERM)
+                os.kill(client_pid, signal.SIGTERM)
             except ProcessLookupError:
-                print(f"⚠️  Process {pid} already terminated.")
-            os.remove(pid_file)
+                print("⚠️  Client process already terminated.")
+            os.remove(client_pid_file)
+            print("✅ Client stopped.")
         else:
-            print(f"❓ PID file for id={node_id} not found.")
+            print("❓ Client PID file not found.")
 
-    print("✅ All server stopped.")
 
-    # 停止客户端
-    client_pid_file = os.path.join(LOG_DIR, "main_client.pid")
-    if os.path.isfile(client_pid_file):
-        with open(client_pid_file) as f:
-            client_pid = int(f.read().strip())
-        print(f"🛑 Stopping client (PID {client_pid})...")
+class TestScenarioBase(Executor):
+
+    def _run(self, _fault_number, _total_number, _pacemaker_loaded):
         try:
-            os.kill(client_pid, signal.SIGTERM)
-        except ProcessLookupError:
-            print("⚠️  Client process already terminated.")
-        os.remove(client_pid_file)
-        print("✅ Client stopped.")
-    else:
-        print("❓ Client PID file not found.")
-
-
-def run_experiments(scenario: str = "a"):
-    build()
-
-    def _run(_fault_number, _total_number, _pacemaker_loaded):
-        try:
-            run(_fault_number, _total_number, _pacemaker_loaded)
+            self.run(_fault_number, _total_number, _pacemaker_loaded)
         finally:
-            stop(_total_number)
+            self.stop(_total_number)
             print("🛑 All replicas stopped.")
 
-    if scenario == "a":
+    def run_experiments(self):
+        raise NotImplementedError
+
+
+class ScenarioA(TestScenarioBase):
+
+    def __init__(self):
+        super().__init__(scenario="a")
+
+    def run_experiments(self):
         fault_number = 0
 
         # 4 <= total_number <= 16
@@ -133,61 +157,150 @@ def run_experiments(scenario: str = "a"):
 
             for times in range(10):
 
-                print(f"start scenario {scenario}: total_number {total_number} times {times + 1} pm False")
+                print(f"start scenario {self.scenario}: total_number {total_number} times {times + 1} pm False")
 
-                _run(fault_number, total_number, False)
+                self._run(fault_number, total_number, False)
 
-                print(f"start scenario {scenario}: total_number {total_number} times {times + 1} pm True")
+                print(f"start scenario {self.scenario}: total_number {total_number} times {times + 1} pm True")
 
-                _run(fault_number, total_number, True)
+                self._run(fault_number, total_number, True)
 
 
-    elif scenario == "b":
+class ScenarioB(TestScenarioBase):
+
+    def __init__(self):
+        super().__init__(scenario="b")
+
+    def run_experiments(self):
 
         # 1 <= fault_number <= 5
-        for fault_number in range(4, 6):
+        for fault_number in range(1, 6):
 
             total_number = 3 * fault_number + 1
 
             for times in range(10):
 
-                print(f"start scenario {scenario}: fault_number {fault_number} times {times + 1} pm False")
+                print(f"start scenario {self.scenario}: fault_number {fault_number} times {times + 1} pm False")
 
-                _run(fault_number, total_number, False)
+                self._run(fault_number, total_number, False)
 
-                print(f"start scenario {scenario}: fault_number {fault_number} times {times + 1} pm True")
+                print(f"start scenario {self.scenario}: fault_number {fault_number} times {times + 1} pm True")
 
-                _run(fault_number, total_number, True)
+                self._run(fault_number, total_number, True)
 
-    elif scenario == "c":
+
+class ScenarioC(TestScenarioBase):
+
+    def __init__(self):
+        super().__init__(scenario="c")
+
+    def run_experiments(self):
 
         for fault_number in range(1, 6):
 
             # range(4, 7)
-            for total_number in range(3 * fault_number + 1, 16):
+            # range(3 * fault_number + 1, 16)
+            for total_number in range(max(10, 3 * fault_number + 1), 16):
 
-                filename_with_pm = f"../files/metric_with_total_{total_number}_fault_{fault_number}_with_pacemaker.csv"
-                filename_without_pm = f"../files/metric_with_total_{total_number}_fault_{fault_number}_without_pacemaker.csv"
+                filename_with_pm = f"../files/metric_with_total_{total_number}_fault_{fault_number}_with_cogsworth.csv"
+                filename_without_pm = f"../files/metric_with_total_{total_number}_fault_{fault_number}_without_cogsworth.csv"
 
                 if not os.path.exists(filename_without_pm):
 
                     for times in range(10):
 
-                        print(f"start scenario {scenario}: fault_number {fault_number} total_number {total_number} times {times + 1} pm False")
+                        print(f"start scenario {self.scenario}: fault_number {fault_number} total_number {total_number} times {times + 1} pm False")
 
-                        _run(fault_number, total_number, False)
+                        self._run(fault_number, total_number, False)
 
                 if not os.path.exists(filename_with_pm):
 
                     for times in range(10):
 
-                        print(f"start scenario {scenario}: fault_number {fault_number} total_number {total_number} times {times + 1} pm True")
+                        print(f"start scenario {self.scenario}: fault_number {fault_number} total_number {total_number} times {times + 1} pm True")
 
-                        _run(fault_number, total_number, True)
+                        self._run(fault_number, total_number, True)
 
+
+
+# def run_experiments(scenario: str = "a"):
+#     build()
+#
+#     def _run(_fault_number, _total_number, _pacemaker_loaded):
+#         try:
+#             run(_fault_number, _total_number, _pacemaker_loaded)
+#         finally:
+#             stop(_total_number)
+#             print("🛑 All replicas stopped.")
+#
+#     if scenario == "a":
+#         fault_number = 0
+#
+#         # 4 <= total_number <= 16
+#         for total_number in range(4, 17):
+#
+#             for times in range(10):
+#
+#                 print(f"start scenario {scenario}: total_number {total_number} times {times + 1} pm False")
+#
+#                 _run(fault_number, total_number, False)
+#
+#                 print(f"start scenario {scenario}: total_number {total_number} times {times + 1} pm True")
+#
+#                 _run(fault_number, total_number, True)
+#
+#
+#     elif scenario == "b":
+#
+#         # 1 <= fault_number <= 5
+#         for fault_number in range(1, 6):
+#
+#             total_number = 3 * fault_number + 1
+#
+#             for times in range(10):
+#
+#                 print(f"start scenario {scenario}: fault_number {fault_number} times {times + 1} pm False")
+#
+#                 _run(fault_number, total_number, False)
+#
+#                 print(f"start scenario {scenario}: fault_number {fault_number} times {times + 1} pm True")
+#
+#                 _run(fault_number, total_number, True)
+#
+#     elif scenario == "c":
+#
+#         for fault_number in range(1, 6):
+#
+#             # range(4, 7)
+#             for total_number in range(3 * fault_number + 1, 16):
+#
+#                 filename_with_pm = f"../files/metric_with_total_{total_number}_fault_{fault_number}_with_cogsworth.csv"
+#                 filename_without_pm = f"../files/metric_with_total_{total_number}_fault_{fault_number}_without_cogsworth.csv"
+#
+#                 if not os.path.exists(filename_without_pm):
+#
+#                     for times in range(10):
+#
+#                         print(f"start scenario {scenario}: fault_number {fault_number} total_number {total_number} times {times + 1} pm False")
+#
+#                         _run(fault_number, total_number, False)
+#
+#                 if not os.path.exists(filename_with_pm):
+#
+#                     for times in range(10):
+#
+#                         print(f"start scenario {scenario}: fault_number {fault_number} total_number {total_number} times {times + 1} pm True")
+#
+#                         _run(fault_number, total_number, True)
+#
 
 if __name__ == '__main__':
-    build()
+    Executor.build()
     # run_experiments("a")
     # run_experiments("b")
-    run_experiments("c")
+    # run_experiments("c")
+
+    # ScenarioA().run_experiments()
+    # ScenarioB().run_experiments()
+    ScenarioC().run_experiments()
+
