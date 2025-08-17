@@ -1,0 +1,41 @@
+zap:
+  level: "info"
+  encoding: "console"
+#  encoding: "json"
+  outputPaths: [ "stdout" ]
+  errorOutputPaths: [ "stderr" ]
+
+http:
+  run_mode: debug
+  http_port: 8000
+
+file_path:
+  files: "/app/files"
+
+replica:
+  - id: 0
+    host: "bhs-replica0"
+    port: 8000
+    privateFile: "/app/configs/replica0_private.pem"
+    publicFile: "/app/configs/replica0_public.pem"
+  - id: 1
+    host: "bhs-replica1"
+    port: 8001
+    privateFile: "/app/configs/replica1_private.pem"
+    publicFile: "/app/configs/replica1_public.pem"
+  - id: 2
+    host: "bhs-replica2"
+    port: 8002
+    privateFile: "/app/configs/replica2_private.pem"
+    publicFile: "/app/configs/replica2_public.pem"
+  - id: 3
+    host: "bhs-replica3"
+    port: 8003
+    privateFile: "/app/configs/replica3_private.pem"
+    publicFile: "/app/configs/replica3_public.pem"
+
+leader: 0
+
+client:
+  host: "bhs-client"
+  port: 9000

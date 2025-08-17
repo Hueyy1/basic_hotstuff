@@ -1,0 +1,101 @@
+zap:
+  level: "info"
+  encoding: "console"
+#  encoding: "json"
+  outputPaths: [ "stdout" ]
+  errorOutputPaths: [ "stderr" ]
+
+http:
+  run_mode: debug
+  http_port: 8000
+
+file_path:
+  files: "/Users/huey/Documents/cs/project/code/hxy352/files"
+
+replica:
+  - id: 0
+    host: "127.0.0.1"
+    port: 8000
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica0_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica0_public.pem"
+  - id: 1
+    host: "127.0.0.1"
+    port: 8001
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica1_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica1_public.pem"
+  - id: 2
+    host: "127.0.0.1"
+    port: 8002
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica2_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica2_public.pem"
+  - id: 3
+    host: "127.0.0.1"
+    port: 8003
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica3_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica3_public.pem"
+  - id: 4
+    host: "127.0.0.1"
+    port: 8004
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica4_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica4_public.pem"
+  - id: 5
+    host: "127.0.0.1"
+    port: 8005
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica5_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica5_public.pem"
+  - id: 6
+    host: "127.0.0.1"
+    port: 8006
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica6_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica6_public.pem"
+  - id: 7
+    host: "127.0.0.1"
+    port: 8007
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica7_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica7_public.pem"
+  - id: 8
+    host: "127.0.0.1"
+    port: 8008
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica8_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica8_public.pem"
+  - id: 9
+    host: "127.0.0.1"
+    port: 8009
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica9_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica9_public.pem"
+  - id: 10
+    host: "127.0.0.1"
+    port: 8010
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica10_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica10_public.pem"
+  - id: 11
+    host: "127.0.0.1"
+    port: 8011
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica11_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica11_public.pem"
+  - id: 12
+    host: "127.0.0.1"
+    port: 8012
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica12_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica12_public.pem"
+  - id: 13
+    host: "127.0.0.1"
+    port: 8013
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica13_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica13_public.pem"
+  - id: 14
+    host: "127.0.0.1"
+    port: 8014
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica14_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica14_public.pem"
+  - id: 15
+    host: "127.0.0.1"
+    port: 8015
+    privateFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica15_private.pem"
+    publicFile: "/Users/huey/Documents/cs/project/code/hxy352/configs/replica15_public.pem"
+
+leader: 0
+
+client:
+  host: "127.0.0.1"
+  port: 9000
