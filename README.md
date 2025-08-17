@@ -1,14 +1,60 @@
 # HotStuff
 
-## Run by source code
+## build locally
 ```shell
 cd src
 go build -o main
-./main generate-certs --config=../configs/config-map.yaml
-./main bhs --config=../configs/config-map.yaml --id=0
-./main bhs --config=../configs/config-map.yaml --id=1
-./main bhs --config=../configs/config-map.yaml --id=2
-./main bhs --config=../configs/config-map.yaml --id=3
+```
+
+## Command Line Usage
+```shell
+./main
+
+Usage:
+   [flags]
+   [command]
+
+Available Commands:
+  bhs            
+  bhs-client     
+  completion     Generate the autocompletion script for the specified shell
+  generate-certs 
+  help           Help about any command
+  test-conf      
+
+Flags:
+  -h, --help            help for this command
+
+Use " [command] --help" for more information about a command.
+```
+
+## Get Started
+```shell
+# generate certs
+./main generate-certs
+
+# start nodes
+./main bhs --id=0 --fault_number=0 --total_number=4 --pacemaker_loaded=false
+./main bhs --id=1 --fault_number=0 --total_number=4 --pacemaker_loaded=false
+./main bhs --id=2 --fault_number=0 --total_number=4 --pacemaker_loaded=false
+./main bhs --id=3 --fault_number=0 --total_number=4 --pacemaker_loaded=false
+
+# start client
+bhs-client --fault_number=0 --total_number=4 --pacemaker_loaded=false
+```
+
+## Visualization
+```shell
+# create virtual environment, python >= 3.11
+cd visualization
+python3 -m venv venv
+pip install -r requirements.txt
+
+# run nodes and client, to get raw metrics
+python3 run_experiments.py
+
+# generate figures
+python3 generate_figures.py
 ```
 
 ## Gorums Proto

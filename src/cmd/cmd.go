@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-var cfgFile string
-
 var rootCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
@@ -39,11 +37,15 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "./configs/config-map.yaml", "config file")
 }
 
 func initConfig() {
-	viper.SetConfigFile(cfgFile)
+
+	viper.SetConfigName("config-map.yaml")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath("./configs/")
+	viper.AddConfigPath("../configs/")
+
 	if err := viper.ReadInConfig(); err != nil {
 		fmt.Println("Can't read config:", err)
 		os.Exit(1)
