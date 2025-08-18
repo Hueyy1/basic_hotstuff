@@ -8,27 +8,42 @@ go build -o main
 
 ## Command Line Usage
 ```shell
-./main
+./main --help
 
-Usage:
-   [flags]
-   [command]
+    Usage:
+       [flags]
+       [command]
+    
+    Available Commands:
+      bhs            
+      bhs-client     
+      completion     Generate the autocompletion script for the specified shell
+      generate-certs 
+      help           Help about any command
+      test-conf      
+    
+    Flags:
+      -h, --help            help for this command
+    
+    Use " [command] --help" for more information about a command.
 
-Available Commands:
-  bhs            
-  bhs-client     
-  completion     Generate the autocompletion script for the specified shell
-  generate-certs 
-  help           Help about any command
-  test-conf      
 
-Flags:
-  -h, --help            help for this command
+./main bhs --help
 
-Use " [command] --help" for more information about a command.
+    basic hotstuff
+    
+    Usage:
+       bhs [flags]
+    
+    Flags:
+      -f, --fault_number int   fault_number, start from 0 to 5
+      -h, --help               help for bhs
+      -i, --id int             id of the replica, start from 0
+      -p, --pacemaker_loaded   pacemaker_loaded, true or false, default false
+      -t, --total_number int   total_number, start from 4 to 16 (default 4)
 ```
 
-## Get Started
+## Getting Started
 ```shell
 # generate certs
 ./main generate-certs
@@ -50,7 +65,7 @@ cd visualization
 python3 -m venv venv
 pip install -r requirements.txt
 
-# run nodes and client, to get raw metrics
+# run nodes and client, to get raw metrics data
 python3 run_experiments.py
 
 # generate figures
