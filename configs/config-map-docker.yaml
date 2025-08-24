@@ -2,8 +2,8 @@ zap:
   level: "info"
   encoding: "console"
 #  encoding: "json"
-  outputPaths: [ "stdout" ]
-  errorOutputPaths: [ "stderr" ]
+  outputPaths: [ "stdout", "/app/logs/app.log" ]
+  errorOutputPaths: [ "stderr", "/app/logs/app.log" ]
 
 http:
   run_mode: debug
