@@ -396,7 +396,7 @@ temp
 
 main
 configs/config-log.yaml
-configs/*.pem
+#configs/*.pem
 configs/*.csr
 configs/*.key
 
