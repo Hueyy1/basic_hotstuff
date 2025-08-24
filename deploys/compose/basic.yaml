@@ -1,35 +1,35 @@
-
 services:
   bhs-replica0:
     image: hxy352-main:latest
     command:
       - "bhs"
-      - "--config=/app/configs/config-map-docker.yaml"
       - "--id=0"
+      - "--fault_number=0"
+      - "--pacemaker_loaded=false"
+      - "--total_number=4"
     volumes:
       - ../../configs:/app/configs:ro
+      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
     ports:
       - "8000:8000"
-#    restart: always
-#    labels:
-#      private_api_go_sdk: "true"
     logging:
-#      driver: "json-file"
       options:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-#    networks:
-#      - network
 
   bhs-replica1:
     image: hxy352-main:latest
     command:
       - "bhs"
-      - "--config=/app/configs/config-map-docker.yaml"
       - "--id=1"
+      - "--fault_number=0"
+      - "--pacemaker_loaded=false"
+      - "--total_number=4"
     volumes:
       - ../../configs:/app/configs:ro
+      # 2. 覆盖 config-map 为 docker 用的版本
+      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
     ports:
       - "8001:8001"
     logging:
@@ -37,17 +37,18 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-#    networks:
-#      - network
 
   bhs-replica2:
     image: hxy352-main:latest
     command:
       - "bhs"
-      - "--config=/app/configs/config-map-docker.yaml"
       - "--id=2"
+      - "--fault_number=0"
+      - "--pacemaker_loaded=false"
+      - "--total_number=4"
     volumes:
       - ../../configs:/app/configs:ro
+      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
     ports:
       - "8002:8002"
     logging:
@@ -55,17 +56,18 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-#    networks:
-#      - network
 
   bhs-replica3:
     image: hxy352-main:latest
     command:
       - "bhs"
-      - "--config=/app/configs/config-map-docker.yaml"
       - "--id=3"
+      - "--fault_number=0"
+      - "--pacemaker_loaded=false"
+      - "--total_number=4"
     volumes:
       - ../../configs:/app/configs:ro
+      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
     ports:
       - "8003:8003"
     logging:
@@ -73,16 +75,17 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-#    networks:
-#      - network
 
   bhs-client:
     image: hxy352-main:latest
     command:
       - "bhs-client"
-      - "--config=/app/configs/config-map-docker.yaml"
+      - "--fault_number=0"
+      - "--pacemaker_loaded=false"
+      - "--total_number=4"
     volumes:
       - ../../configs:/app/configs:ro
+      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
     ports:
       - "9000:9000"
     logging:
@@ -90,17 +93,8 @@ services:
         max-size: "50m"
         max-file: "1"
         compress: "false"
-#    networks:
-#      - network
     depends_on:
       - bhs-replica0
       - bhs-replica1
       - bhs-replica2
       - bhs-replica3
-
-#networks:
-#  network:
-#    driver: bridge
-##    ipam:
-##      config:
-##        - subnet: 172.20.0.0/16

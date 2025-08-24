@@ -1,5 +1,12 @@
 # HotStuff
 
+## system requirement
+```shell
+go 1.24.4
+python 3.11
+macos/linux
+```
+
 ## build locally
 ```shell
 cd src
@@ -92,4 +99,14 @@ protoc -I=$(go list -m -f {{.Dir}} github.com/relab/gorums):.\
   --go_out=paths=source_relative:. \
   --gorums_out=paths=source_relative:. \
   proto/clientpb/client.proto
+```
+
+
+## build image
+```shell
+# current work dir hxy352
+make build
+
+# start demo
+make run-basic-hotstuff
 ```
