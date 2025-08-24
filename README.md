@@ -52,8 +52,8 @@ go build -o main
 
 ## Getting Started
 ```shell
-# generate certs
-./main generate-certs
+# generate certs if there is no certs in configs
+#./main generate-certs
 
 # start nodes
 ./main bhs --id=0 --fault_number=0 --total_number=4 --pacemaker_loaded=false

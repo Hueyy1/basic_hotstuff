@@ -6,5 +6,5 @@
 .idea
 venv
 
-*.png
+#*.png
 *.csv
