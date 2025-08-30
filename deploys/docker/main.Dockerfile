@@ -15,11 +15,14 @@ FROM hxy352-base:latest AS runtime
 
 COPY --from=build /data/main ${APP_HOME}/main
 COPY ./docker-entrypoint.sh /docker-entrypoint.sh
+COPY ./configs ${APP_HOME}/configs
+COPY ./configs/config-map-docker.yaml ${APP_HOME}/configs/config-map.yaml
 
 RUN chmod +x /docker-entrypoint.sh \
 &&  chmod +x ${APP_HOME}/main
 
-VOLUME "${APP_HOME}/configs" "${APP_HOME}/files"
+#VOLUME "${APP_HOME}/configs" "${APP_HOME}/files"
+VOLUME "${APP_HOME}/files" "${APP_HOME}/logs"
 
 ENTRYPOINT [ "/docker-entrypoint.sh", "main" ]
 

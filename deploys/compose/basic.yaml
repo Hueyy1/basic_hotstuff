@@ -8,9 +8,9 @@ services:
       - "--pacemaker_loaded=false"
       - "--total_number=4"
     volumes:
-      - ../../configs:/app/configs:ro
-      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
-      - ../../files:/app/files:rw
+#      - ../../configs:/app/configs:ro
+#      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
+#      - ../../files:/app/files:rw
       - ../../logs/main_0.log:/app/logs/app.log:rw
     ports:
       - "8000:8000"
@@ -29,10 +29,10 @@ services:
       - "--pacemaker_loaded=false"
       - "--total_number=4"
     volumes:
-      - ../../configs:/app/configs:ro
-      # 2. 覆盖 config-map 为 docker 用的版本
-      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
-      - ../../files:/app/files:rw
+#      - ../../configs:/app/configs:ro
+#      # 2. 覆盖 config-map 为 docker 用的版本
+#      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
+#      - ../../files:/app/files:rw
       - ../../logs/main_1.log:/app/logs/app.log:rw
     ports:
       - "8001:8001"
@@ -51,9 +51,9 @@ services:
       - "--pacemaker_loaded=false"
       - "--total_number=4"
     volumes:
-      - ../../configs:/app/configs:ro
-      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
-      - ../../files:/app/files:rw
+#      - ../../configs:/app/configs:ro
+#      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
+#      - ../../files:/app/files:rw
       - ../../logs/main_2.log:/app/logs/app.log:rw
     ports:
       - "8002:8002"
@@ -72,9 +72,9 @@ services:
       - "--pacemaker_loaded=false"
       - "--total_number=4"
     volumes:
-      - ../../configs:/app/configs:ro
-      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
-      - ../../files:/app/files:rw
+#      - ../../configs:/app/configs:ro
+#      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
+#      - ../../files:/app/files:rw
       - ../../logs/main_3.log:/app/logs/app.log:rw
     ports:
       - "8003:8003"
@@ -92,9 +92,9 @@ services:
       - "--pacemaker_loaded=false"
       - "--total_number=4"
     volumes:
-      - ../../configs:/app/configs:ro
-      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
-      - ../../files:/app/files:rw
+#      - ../../configs:/app/configs:ro
+#      - ../../configs/config-map-docker.yaml:/app/configs/config-map.yaml:ro
+#      - ../../files:/app/files:rw
       - ../../logs/main_client.log:/app/logs/app.log:rw
     ports:
       - "9000:9000"

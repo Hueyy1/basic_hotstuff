@@ -11,8 +11,16 @@ base: deploys/docker/base.Dockerfile
 build: base deploys/docker/main.Dockerfile
 	docker build -f=deploys/docker/main.Dockerfile --tag=${IMAGE_NAME_MAIN}:latest ./
 
-run-basic-hotstuff:
+push:
+	docker tag ${IMAGE_NAME_MAIN}:latest 715605340/${IMAGE_NAME_MAIN}:latest
+	docker push 715605340/${IMAGE_NAME_MAIN}:latest
+
+pull:
+	docker pull 715605340/${IMAGE_NAME_MAIN}:latest
+	docker tag 715605340/${IMAGE_NAME_MAIN}:latest ${IMAGE_NAME_MAIN}:latest
+
+run:
 	docker-compose -f "deploys/compose/basic.yaml" -p hxy352-hotstuff up -d
 
-stop-basic-hotstuff:
+stop:
 	docker-compose -f "deploys/compose/basic.yaml" -p hxy352-hotstuff stop
