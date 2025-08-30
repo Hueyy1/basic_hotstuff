@@ -145,6 +145,25 @@ class VisualizationBase:
         plt.savefig(f"scenario_{cls.scenario}_throughput.png")
         plt.show()
 
+    def calculate_latency_increase(self, df_all):
+        print(df_all.columns)
+        group_keys = ['total_number', 'fault_number']
+        pivot_latency = df_all.pivot_table(index=group_keys, columns='pacemaker', values='latency_ms')
+        pivot_latency = pivot_latency.dropna(subset=['with', 'without'])
+        pivot_latency['latency_increase_percent'] = (pivot_latency['with'] - pivot_latency['without']) / pivot_latency['without'] * 100
+        mean_increase = pivot_latency['latency_increase_percent'].mean()
+        print(f"Average latency increase with Cogsworth: {mean_increase:.2f}%")
+
+        # throughput
+        pivot_throughput = df_all.pivot_table(index=group_keys, columns='pacemaker', values='throughput')
+        pivot_throughput = pivot_throughput.dropna(subset=['with', 'without'])
+        # throughput下降用 (with - without)/without * 100，正为提升，负为下降
+        pivot_throughput['throughput_decrease_percent'] = (pivot_throughput['with'] - pivot_throughput['without']) / pivot_throughput['without'] * 100
+        mean_decrease = pivot_throughput['throughput_decrease_percent'].mean()
+        print(f"Throughput increase with Cogsworth: {mean_decrease:.2f}%")
+
+        return mean_increase, mean_decrease
+
 
 
 class VisualiseA(VisualizationBase):
@@ -168,6 +187,8 @@ class VisualiseA(VisualizationBase):
         # 转换成 DataFrame 并排序
         df_all = pd.DataFrame(data)
         df_all.sort_values(by='total_number', inplace=True)
+
+        self.calculate_latency_increase(df_all)
 
         self.generate_plot(df_all, "Total Nodes Count", "total_number")
 
@@ -201,6 +222,8 @@ class VisualiseB(VisualizationBase):
         # 转换成 DataFrame 并排序
         df_all = pd.DataFrame(data)
         df_all.sort_values(by='fault_number', inplace=True)
+
+        self.calculate_latency_increase(df_all)
 
         self.generate_plot(df_all, "Fault Nodes Count", "fault_number")
 
@@ -237,6 +260,8 @@ class VisualiseC(VisualizationBase):
         # 转换成 DataFrame 并排序
         df_all = pd.DataFrame(data)
         df_all.sort_values(by='total_number', inplace=True)
+
+        self.calculate_latency_increase(df_all)
 
         self.generate_plot(df_all, "Total Nodes Count", "total_number")
 
